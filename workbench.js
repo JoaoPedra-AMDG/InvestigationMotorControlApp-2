@@ -158,7 +158,7 @@ async function loadSpectra(){
  $('frequency-note').textContent=Object.keys(frequencyData).length?'The shaded band surrounds the requested electrical frequency. Compare its integrated A² with the rest of the measured range.':'No saved spectra for this run. Recalculate from its original high-rate captures if available.';
  for(const role of ['test','load']){
   const s=frequencyData[role],el=$('frequency-'+role+'-summary');
-  el.innerHTML=s?`<p><strong>${(100*s.target_fraction).toFixed(1)}%</strong> of resolved phase-current variance in the desired band; <strong>${(100*(1-s.target_fraction)).toFixed(1)}%</strong> elsewhere.</p><p>Desired ${s.desired_electrical_hz.toFixed(1)} Hz · band ${s.desired_band_hz.map(x=>x.toFixed(1)).join('–')} Hz · ${s.target_to_outside_db===null?'ratio unavailable':s.target_to_outside_db.toFixed(1)+' dB target/outside'}</p><p class="small">${esc(s.samples)} samples at ${s.sample_rate_hz.toFixed(0)} Hz; ${s.resolution_hz.toFixed(1)} Hz bins. ${esc(s.meaning)}</p>`:'<p>No valid onboard phase-current spectrum available.</p>';
+  el.innerHTML=s?`<p>${s.target_fraction===null?'No current variance to compare.':`<strong>${(100*s.target_fraction).toFixed(1)}%</strong> of resolved phase-current variance in the desired band; <strong>${(100*(1-s.target_fraction)).toFixed(1)}%</strong> elsewhere.`}</p><p>Desired ${s.desired_electrical_hz.toFixed(1)} Hz · band ${s.desired_band_hz.map(x=>x.toFixed(1)).join('–')} Hz · ${s.target_to_outside_db===null?'ratio unavailable':s.target_to_outside_db.toFixed(1)+' dB target/outside'}</p><p class="small">${esc(s.samples)} samples at ${s.sample_rate_hz.toFixed(0)} Hz; ${s.resolution_hz.toFixed(1)} Hz bins. ${esc(s.meaning)}</p>`:'<p>No valid onboard phase-current spectrum available.</p>';
  }
  drawSpectra();
 }
@@ -181,7 +181,7 @@ function drawSpectra(){
  }
 }
 bind('frequency-refresh',loadSpectra);
-bind('frequency-reprocess',async()=>{const id=$('frequency-run').value;if(!id)throw Error('Select a captured run.');for(const role of ['test','load']){try{await send('spectrum',{run_id:id,dataset:'capture_'+role})}catch(e){$('frequency-'+role+'-summary').textContent=e.message}}await loadSpectra();say('Frequency analysis recalculated from original capture files.')});
+bind('frequency-reprocess',async()=>{const id=$('frequency-run').value;if(!id)throw Error('Select a captured run.');let completed=0,errors=[];for(const role of ['test','load']){try{await send('spectrum',{run_id:id,dataset:'capture_'+role});completed++}catch(e){errors.push(role+': '+e.message)}}await loadSpectra();if(errors.length)$('frequency-note').textContent+=' '+errors.join(' ');say(completed?`Recalculated ${completed} spectrum${completed===1?'':'s'} from original captures.`:'No spectrum could be calculated; see the reasons above.')});
 $('frequency-run').addEventListener('change',()=>loadSpectra().catch(showError));
 $('frequency-range').addEventListener('change',drawSpectra);
 let tuningData={state:'idle',trials:[]};

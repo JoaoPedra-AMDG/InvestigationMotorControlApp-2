@@ -53,7 +53,18 @@ class TuningSession:
             if self.data.get('id'):
                 atomic_json(self.rig.output/'tuning'/self.data['id']/'session.json',self.data)
 
+    def _same_boards(self):
+        h=self.rig.hardware.snapshot()
+        if h['state']!='CONNECTED' or any(not b.get('connected') for b in h['boards'].values()):
+            raise ValueError('Reconnect both boards and confirm they are stopped before applying tuning settings.')
+        if any(h['boards'][role].get('serial')!=serial for role,serial in self.data['board_serials'].items()):
+            raise ValueError('Board identity differs from this tuning session. Start a new session.')
+
     def prepare(self, role, rpm, load_a):
+        if self.snapshot()['state']=='applied':
+            raise ValueError('Save or restore the applied gains before starting another tuning session.')
+        if self.snapshot()['state']=='needs_attention':
+            raise ValueError('Inspect the boards and restore the previous tuning settings before another session.')
         with self.rig.lock:
             if self.rig.starting or self.rig.recording or self.rig.automated_point or self.rig.capture_pending or self.rig.batch.reserved():
                 raise ValueError('Finish the active test or batch before tuning.')
@@ -202,6 +213,7 @@ class TuningSession:
             if self.data['state']!='review' or self.data['role']!='test' or not self.data['proposed_gains']:
                 raise ValueError('No reviewed velocity-gain recommendation is available.')
             proposed=self.data['proposed_gains'];baseline=self.data['baseline_gains'];expected=self.data['current_gains']
+        self._same_boards()
         self.rig.hardware.set_tuning_gains(expected,proposed,baseline)
         self._set(current_gains=proposed,state='applied',task='Suggested gains are active temporarily. Run a validation test before saving to the board.')
         return self.snapshot()
@@ -211,6 +223,7 @@ class TuningSession:
             if self.thread and self.thread.is_alive():raise ValueError('Wait for trials to stop before restoring.')
             if self.data.get('role')!='test':raise ValueError('No velocity gains were changed.')
             expected=self.data['current_gains'];baseline=self.data['baseline_gains']
+        self._same_boards()
         self.rig.hardware.set_tuning_gains(expected,baseline,baseline)
         self._set(current_gains=baseline,state='review',task='Original gains restored.')
         return self.snapshot()
@@ -220,6 +233,7 @@ class TuningSession:
             if self.data['state']!='applied':
                 raise ValueError('Apply and validate recommended gains before saving to the test board.')
             expected=dict(self.data['current_gains'])
+        self._same_boards()
         self.rig.hardware.save_tuning_gains(expected)
         self._set(state='saved',task='Test-board gains saved. Reconnect and verify both boards before motion.')
         return self.snapshot()

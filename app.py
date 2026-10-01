@@ -128,7 +128,7 @@ class Rig:
             self.capture_preflight(p,h)
             if not self.settled():raise ValueError('High-rate steady-state capture requires settled speed and load.')
         self.run_zero=time.perf_counter();self.run_started_host=self.run_zero;self.sequence=0
-        meta={'schema_version':3,'source':'HARDWARE','software_version':'3.0.0','python_version':sys.version,
+        meta={'schema_version':3,'source':'HARDWARE','software_version':'3.1.0','python_version':sys.version,
           'plan':dict(p),'devices':h['boards'],'profile':h['profile'],'calibration':h['profile'].get('calibration',{}),
           'acquisition':{'source':'HOST_TELEMETRY','requested_hz':self.rate,'bandwidth_hz':None,'filtering':'Firmware report filtering; see saved board configuration. No interpolation.',
              'synchronization':{'simultaneous':False,'method':'Sequential USB reads; each board read interval retained','uncertainty_s':None}},
@@ -324,9 +324,12 @@ class Rig:
             elif action=='review':return self.store.review(data['run_id'],data.get('dataset','telemetry'),data.get('settings',{}))
             elif action=='spectrum':
                 from spectrum import analyze_spectrum
-                run_id=data['run_id'];dataset=data['dataset']
-                if dataset not in ('capture_test','capture_load'):
+                run_id=data['run_id'];requested=data['dataset']
+                if requested not in ('capture_test','capture_load'):
                     raise ValueError('Choose an original test or load capture.')
+                run=self.store.run(run_id)
+                dataset=next((name for name in reversed(run['datasets']) if name.startswith(requested+'_')),None)
+                if dataset is None:raise ValueError('This run has no '+requested+' dataset.')
                 rows,metadata=self.store.load_dataset(run_id,dataset)
                 result=analyze_spectrum(rows,metadata)
                 atomic_json(self.store.run_dir(run_id)/f'spectrum-{metadata["role"]}.json',result)
