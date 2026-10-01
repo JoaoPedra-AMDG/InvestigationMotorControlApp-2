@@ -8,7 +8,7 @@ This repository is the distributable application, not a GitHub Pages motor contr
 
 On Windows, use **Code → Download ZIP** on GitHub, extract the ZIP to a local drive, open PowerShell in the extracted folder and run `./start.ps1` (or `.\start.ps1` in Windows PowerShell). The launcher installs pinned Python dependencies in a local environment on first use. On Linux, use the setup instructions below. Do not copy a `.venv` from another computer.
 
-The **Frequency** page calculates and saves a one-sided Hann PSD for test and load three-phase onboard captures. It shows the share of resolved current variance (A²) in a band around the requested electrical frequency versus the rest, with a 0–500 Hz and full-band plot. The result is not electrical power in watts, and a short single capture has limited frequency resolution. Recalculation reads the original captured CSV; the run ZIP includes the saved spectrum JSON.
+**Results → Current-frequency spectrum** calculates and saves a one-sided Hann PSD for test and load three-phase onboard captures. It shows the share of resolved current variance (A²) in a band around the requested electrical frequency versus the rest, with a 0–500 Hz and full-band plot. The result is not electrical power in watts, and a short single capture has limited frequency resolution. Recalculation reads the original captured CSV; the run ZIP includes the saved spectrum JSON.
 
 The **Motor tuning** page runs bounded, temporary velocity-PI gain comparisons on an already commissioned **sensored test motor**. It checks readiness and saves the starting gains, gives explicit physical-rig instructions, runs up to three short trials within the configured limits, records the response, and restores the starting gains before review. The operator can apply a recommended gain set temporarily, restore the original values, or explicitly save the applied values to the test board. The load-motor option records a current-tracking diagnostic without changing its current-loop gains. Automated sensorless commissioning/startup is not enabled in this release; the existing sensorless recording/import path remains available.
 
@@ -129,19 +129,17 @@ Use the horizontal menu bar to move between these views:
 
 | Page | Purpose |
 | --- | --- |
-| Home | Operating sequence and explanation of the controls, signals and recording limits. |
-| Motors | Test motor in the left column and load motor in the right column; each shows DC voltage, DC current, rotor speed, rotor position and torque. |
-| Test matrix | Select a tile and Run selected, or Run all selected tests; watch progress on the matrix. |
-| Troubleshooting | Diagnose local limits, watchdogs and controller modes; preview, apply and read back supported settings while idle. |
-| Python scripts | Read the actual source files that implement the application. Viewing source never executes it. |
-| Connections | Assign both serial numbers, save the validated profile, explicitly connect, inspect states/readiness and disconnect. |
-| Review and export | Process ripple results, switch metrics, compare feedback modes at each load and export results CSV or raw run ZIPs. |
+| Connect and status | Assign both serial numbers, save the validated profile, connect, inspect board states and readiness, and resolve blocked settings. |
+| Manual control | Set test speed and opposing load, watch side-by-side position, speed and three-phase current trends, and record a selected point. |
+| Motor tuning | Follow guided tasks and bounded velocity-PI trials on the sensored test motor, or measure load current tracking. |
+| Test matrix | Select a tile and run one point or an included sequence; watch progress on the matrix. |
+| Results | Review raw runs, plot and process data, compare frequency spectra and independent repeats, and export CSV or run ZIPs. |
 
 Repeat comparisons and earlier analysis history remain available. Historical records retain their original acquisition-source tags; they are not relabelled as hardware experiments.
 
 ## Commissioning before the first connection
 
-Commission both motors individually using the ODrive GUI, save their configurations, and release the GUI's USB connections before connecting this application. The application does not flash firmware, calibrate motors, change encoder routing. The Troubleshooting page can explicitly update and optionally save the allowlisted watchdog, controller-mode, ramp and zero-setpoint settings.
+Commission both motors individually using the ODrive GUI, save their configurations, and release the GUI's USB connections before connecting this application. The application does not flash firmware, calibrate motors, change encoder routing. **Connect and status → Resolve blocked board settings** can explicitly update and optionally save the allowlisted watchdog, controller-mode, ramp and zero-setpoint settings.
 
 The current adapter checks these requirements before allowing motion:
 
@@ -210,7 +208,7 @@ Feedback routing is never switched by the queue. Automatic sensorless startup re
 
 ## Processing current ripple
 
-**Review & export > Process all recorded results** reads original high-rate CSV samples. It uses a common duration (the shortest eligible buffer) so sensored and sensorless channel counts do not give unequal maximum-search windows. It fits a DC term plus sine/cosine at the electrical fundamental separately for each phase. The fundamental comes from captured speed and configured pole pairs, or a previously saved analysis of that same dataset with an explicit frequency for imported data. For imports without speed, first load the dataset, enter its frequency and Analyze selected window; then Process all recorded results. A frequency entered for one run is never applied to other speeds.
+**Results → Process all recorded results** reads original high-rate CSV samples. It uses a common duration (the shortest eligible buffer) so sensored and sensorless channel counts do not give unequal maximum-search windows. It fits a DC term plus sine/cosine at the electrical fundamental separately for each phase. The fundamental comes from captured speed and configured pole pairs, or a previously saved analysis of that same dataset with an explicit frequency for imported data. For imports without speed, first load the dataset, enter its frequency and Analyze selected window; then Process all recorded results. A frequency entered for one run is never applied to other speeds.
 
 The metric selector offers:
 
@@ -246,10 +244,10 @@ Official references for commissioning and API details:
 
 ## Fixing blocked setup checks
 
-Open **Troubleshooting** from the menu bar or the readiness panel. The five cards show the current local limits and each board's watchdog and control-mode checks.
+Open **Connect and status → Resolve blocked board settings**. The five cards show the current local limits and each board's watchdog and control-mode checks.
 
 1. Enter validated local maximum speed and load current, then **Save local rig limits**. These only limit commands from this computer. Connected boards must be idle; values above their existing velocity/current limits are rejected.
-2. Connect the boards and verify their physical roles and axis units on Connections. Use **Read current board settings** to refresh the forms.
+2. Connect the boards and verify their physical roles and axis units on Connect and status. Use **Read current board settings** to refresh the forms.
 3. Enter compatible watchdog timeouts and validated ramp rates. Test speed ramp is entered in rpm/s and converted to turns/s²; load torque ramp is entered in N·m/s.
 4. Click **Preview board changes**. Inspect both serial numbers and every current/proposed value. The tool sets test velocity control + velocity ramp, load torque control + torque ramp, enables both watchdogs, and zeros current and initial inputs. It does not run calibration, switch encoders or increase firmware current/voltage limits.
 5. Click **Apply reviewed board changes**. Each setting is read back. Both boards must stay IDLE, disarmed and below 1 rpm; no tests, captures or batches may be active. A changed/expired preview is rejected. Partial failures remain visible and are logged under `recordings/settings-history.jsonl`.
