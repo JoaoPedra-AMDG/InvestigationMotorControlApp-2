@@ -18,7 +18,7 @@ The hardware code is implemented but has not been validated on the physical rig.
 
 ## First-time setup on a lab computer
 
-Use these instructions once on each Windows or Linux computer that may operate the rig. Copy the complete `motor-dashboard` folder to the computer's local drive first. Do not run it from OneDrive, a network share or a USB drive, and do not copy a `.venv` folder from another computer.
+Use these instructions once on each Windows or Linux computer that may operate the rig. Extract or copy the complete repository folder to the computer's local drive first. Do not run it from OneDrive, a network share or a USB drive, and do not copy a `.venv` folder from another computer.
 
 Before connecting either board:
 
@@ -29,7 +29,7 @@ Before connecting either board:
 
 ### Windows 10 or 11
 
-1. Open PowerShell in the copied `motor-dashboard` folder.
+1. Open PowerShell in the extracted repository folder.
 2. Run:
 
    ```powershell
@@ -49,7 +49,7 @@ Before connecting either board:
 
 The ODrive Python package requires a supported 64-bit Linux distribution, `libusb` and ODrive USB permission rules. These commands are written for Ubuntu or Debian-based lab computers.
 
-1. Open a terminal in the copied `motor-dashboard` folder and install the required system packages:
+1. Open a terminal in the extracted repository folder and install the required system packages:
 
    ```bash
    sudo apt update
