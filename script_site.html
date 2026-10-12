@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Motor Test Workbench</title>
+  <link rel="stylesheet" href="/script_site.css">
+  <script src="/script_site.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div><strong>Motor Test Workbench</strong><small>Powered by the working AllTests.py workflow</small></div>
+    <div class="top-actions"><span id="state" class="badge">Idle</span><button id="stop" class="danger">Stop both motors</button></div>
+  </header>
+  <nav class="tabs" aria-label="Sections">
+    <a href="#connections" data-tab="connections">Connect and status</a>
+    <a href="#manual" data-tab="manual">Manual control</a>
+    <a href="#tuning" data-tab="tuning">Motor tuning</a>
+    <a href="#matrix" data-tab="matrix">Test matrix</a>
+    <a href="#results" data-tab="results">Results</a>
+  </nav>
+  <main>
+    <p id="error" role="alert" hidden></p>
+    <section id="connections" class="page">
+      <h1>Connect and status</h1>
+      <p>The script connects to both ODrives when a test starts, then releases USB when it finishes. Its board, fault, calibration and stop checks are shown in the run log.</p>
+      <div class="grid two">
+        <article class="card"><span class="eyebrow">TEST MOTOR</span><h2 id="test-serial">—</h2><p>Opposing torque control</p></article>
+        <article class="card"><span class="eyebrow">LOAD MOTOR</span><h2 id="load-serial">—</h2><p>Velocity control</p></article>
+      </div>
+      <article class="card"><div class="row"><div><h2>Run state</h2><p id="run-detail">No workflow is running.</p></div><button id="refresh-status">Refresh</button></div><pre id="log" aria-live="polite"></pre></article>
+      <article id="prompt-card" class="card prompt" hidden><h2>Operator action required</h2><p id="prompt-text"></p><div class="row start"><button id="answer-yes" class="primary">Continue / yes</button><button id="answer-no">Cancel / no</button><button id="answer-ready" hidden>Ready after GUI handoff</button></div></article>
+      <article class="card"><h2>Live trends</h2><p id="live-source">Live host-monitor data appears here during a script run. Test and load boards are polled separately.</p><div id="live-charts" class="grid two"></div></article>
+    </section>
+    <section id="manual" class="page" hidden>
+      <h1>Manual control</h1>
+      <p>Run one measured point with the script’s exact connection, ramp, opposing-current sign probe, capture and stop sequence. The script asks for confirmation before motion and before capture.</p>
+      <article class="card"><div class="fields">
+        <label>Test feedback<select id="point-mode"><option value="sensored">Sensored</option><option value="sensorless">Sensorless</option></select></label>
+        <label>Target speed · rpm<input id="point-rpm" type="number" min="1" max="1800" value="600"></label>
+        <label>Opposing test current · A<input id="point-amps" type="number" min="0" max="50" step="0.1" value="0.5"></label>
+        <label>Feedback bandwidth<select id="point-bandwidth"><option value="keep">Keep configured value</option><option value="250">250 1/s</option><option value="500">500 1/s</option><option value="1000">1000 1/s</option></select></label>
+      </div><div class="row start"><button id="run-point" class="primary">Prepare one test point</button></div></article>
+      <p class="muted">The script controls speed with the load ODrive and applies opposing torque with the test ODrive. It verifies the direction using measured current before the requested load is applied.</p>
+    </section>
+    <section id="tuning" class="page" hidden>
+      <h1>Motor tuning</h1>
+      <article class="card"><h2>Script-managed settings</h2><p>AllTests.py defines the velocity gains, ramp rates and current limits used during its configuration stage. Feedback bandwidth can be selected for each measured point. Automated PID tuning is not implemented in the working script, so this page does not issue independent tuning commands.</p><p>Change the settings in <code>AllTests.py</code> after checking the rig, then restart a test workflow to apply the script’s own configuration and verification sequence.</p></article>
+    </section>
+    <section id="matrix" class="page" hidden>
+      <h1>Test matrix</h1>
+      <p>Run the script’s matrix workflow. Each point is configured, settled, captured, stopped and saved by AllTests.py. The script stops the matrix on a failed point.</p>
+      <article class="card"><div class="fields">
+        <label>Speeds · rpm, comma-separated<input id="matrix-rpms" value="600"></label>
+        <label>Opposing currents · A, comma-separated<input id="matrix-loads" value="0.5"></label>
+        <label>Feedback modes<select id="matrix-modes"><option value="sensored">Sensored</option><option value="sensorless">Sensorless</option><option value="sensored,sensorless">Both</option></select></label>
+        <label>Feedback bandwidth<select id="matrix-bandwidth"><option value="keep">Keep configured value</option><option value="250">250 1/s</option><option value="500">500 1/s</option><option value="1000">1000 1/s</option></select></label>
+      </div><div class="row start"><button id="run-matrix" class="primary">Prepare matrix</button></div></article>
+      <article class="card"><h2>Complete script sequence</h2><p>Runs calibration, the sensored sweep, feedback handoff, sensorless validation, the sensorless sweep and summary plots using the script’s built-in plan. This can make persistent ODrive changes and requires the script’s operator confirmations.</p><button id="run-sequence">Prepare complete sequence</button></article>
+    </section>
+    <section id="results" class="page" hidden>
+      <h1>Results</h1>
+      <p>Original files saved by AllTests.py. CSV data and metadata can be downloaded; generated plots open here.</p>
+      <button id="refresh-results">Refresh results</button>
+      <div class="grid results-layout"><article class="card"><h2>Saved files</h2><div id="result-files" class="file-list"></div></article><article class="card"><h2 id="preview-title">Preview</h2><div id="preview"></div></article></div>
+    </section>
+  </main>
+</body>
+</html>

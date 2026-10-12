@@ -455,12 +455,7 @@ def make_handler(rig):
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--port',type=int,default=8765)
-    parser.add_argument('--rate',type=int,default=20,choices=range(1,101),metavar='1..100');args=parser.parse_args()
-    # Bind the server before opening storage to prevent a second process recovering an active run.
-    server=ThreadingHTTPServer(('127.0.0.1',args.port),BaseHTTPRequestHandler)
-    rig=Rig(rate=args.rate);server.RequestHandlerClass=make_handler(rig)
-    print(f'ODRIVE HARDWARE WORKBENCH — http://127.0.0.1:{args.port}',flush=True)
-    try:server.serve_forever()
-    except KeyboardInterrupt:pass
-    finally:server.server_close();rig.close()
+    # The public launcher uses the proven AllTests.py workflow. The older Rig
+    # adapter remains importable for archived data/tests but no longer owns USB.
+    from script_site import main as site_main
+    site_main()
