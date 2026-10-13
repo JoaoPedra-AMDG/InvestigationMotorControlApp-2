@@ -21,6 +21,7 @@
   </nav>
   <main>
     <p id="error" role="alert" hidden></p>
+    <article id="prompt-card" class="card prompt" hidden><h2>Operator action required</h2><p id="prompt-text"></p><div class="row start"><button id="answer-yes" class="primary">Continue / yes</button><button id="answer-no">Cancel / no</button><button id="answer-ready" hidden>Ready after GUI handoff</button></div></article>
     <section id="connections" class="page">
       <h1>Connect and status</h1>
       <p>The script connects to both ODrives when a test starts, then releases USB when it finishes. Its board, fault, calibration and stop checks are shown in the run log.</p>
@@ -29,8 +30,7 @@
         <article class="card"><span class="eyebrow">LOAD MOTOR</span><h2 id="load-serial">—</h2><p>Velocity control</p></article>
       </div>
       <article class="card"><div class="row"><div><h2>Run state</h2><p id="run-detail">No workflow is running.</p></div><button id="refresh-status">Refresh</button></div><pre id="log" aria-live="polite"></pre></article>
-      <article id="prompt-card" class="card prompt" hidden><h2>Operator action required</h2><p id="prompt-text"></p><div class="row start"><button id="answer-yes" class="primary">Continue / yes</button><button id="answer-no">Cancel / no</button><button id="answer-ready" hidden>Ready after GUI handoff</button></div></article>
-      <article class="card"><h2>Live trends</h2><p id="live-source">Live host-monitor data appears here during a script run. Test and load boards are polled separately.</p><div id="live-charts" class="grid two"></div></article>
+      <article class="card"><h2>Live trends</h2><p class="live-source">Waiting for live readings from the script.</p><div class="live-charts grid two"></div></article>
     </section>
     <section id="manual" class="page" hidden>
       <h1>Manual control</h1>
@@ -41,6 +41,7 @@
         <label>Opposing test current · A<input id="point-amps" type="number" min="0" max="50" step="0.1" value="0.5"></label>
         <label>Feedback bandwidth<select id="point-bandwidth"><option value="keep">Keep configured value</option><option value="250">250 1/s</option><option value="500">500 1/s</option><option value="1000">1000 1/s</option></select></label>
       </div><div class="row start"><button id="run-point" class="primary">Prepare one test point</button></div></article>
+      <article class="card"><h2>Live trends</h2><p class="live-source">Waiting for live readings from the script.</p><div class="live-charts grid two"></div></article>
       <p class="muted">The script controls speed with the load ODrive and applies opposing torque with the test ODrive. It verifies the direction using measured current before the requested load is applied.</p>
     </section>
     <section id="tuning" class="page" hidden>
@@ -56,6 +57,7 @@
         <label>Feedback modes<select id="matrix-modes"><option value="sensored">Sensored</option><option value="sensorless">Sensorless</option><option value="sensored,sensorless">Both</option></select></label>
         <label>Feedback bandwidth<select id="matrix-bandwidth"><option value="keep">Keep configured value</option><option value="250">250 1/s</option><option value="500">500 1/s</option><option value="1000">1000 1/s</option></select></label>
       </div><div class="row start"><button id="run-matrix" class="primary">Prepare matrix</button></div></article>
+      <article class="card"><h2>Live trends</h2><p class="live-source">Waiting for live readings from the script.</p><div class="live-charts grid two"></div></article>
       <article class="card"><h2>Complete script sequence</h2><p>Runs calibration, the sensored sweep, feedback handoff, sensorless validation, the sensorless sweep and summary plots using the script’s built-in plan. This can make persistent ODrive changes and requires the script’s operator confirmations.</p><button id="run-sequence">Prepare complete sequence</button></article>
     </section>
     <section id="results" class="page" hidden>

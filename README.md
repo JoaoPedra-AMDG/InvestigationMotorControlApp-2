@@ -19,7 +19,7 @@ py -3 -m venv .venv
 
 ## Sections
 
-- **Connect and status:** board serials, script output, live run state, operator prompts, and side-by-side test/load position, speed and phase-current trends from the script's `monitor.jsonl`. Each script workflow opens the boards itself and releases them on completion.
+- **Connect and status:** board serials, script output, live run state, operator prompts, and side-by-side test/load position, speed and phase-current trends from the script's `monitor.jsonl`. The same live trends appear on Manual control and Test matrix. Each script workflow opens the boards itself and releases them on completion.
 - **Manual control:** one sensored or sensorless measured point using the script's speed ramp, current sign probe, capture and stop. This is a point workflow, rather than arbitrary direct setpoint control.
 - **Motor tuning:** explains the script-managed velocity gains, ramps, limits and per-point feedback bandwidth. Independent automated PID tuning is not part of the working script and is not exposed as an active control.
 - **Test matrix:** runs the script's matrix workflow or full six-stage sequence. An error stops the matrix, as in the script.

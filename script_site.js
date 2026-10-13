@@ -7,11 +7,12 @@ function showTab() {
   const tab=tabs.includes(location.hash.slice(1))?location.hash.slice(1):'connections';
   tabs.forEach(name=>{ $(name).hidden=name!==tab; document.querySelector(`[data-tab="${name}"]`).classList.toggle('active',name===tab); });
   if(tab==='results') refreshResults().catch(showError);
+  if(['connections','manual','matrix'].includes(tab)) refreshLive().catch(showError);
 }
 addEventListener('hashchange',showTab); showTab();
 async function get(url) { const response=await fetch(url,{cache:'no-store'}); if(!response.ok)throw Error((await response.json()).error||'Request failed'); return response.json(); }
 async function post(data) { const response=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}); const body=await response.json(); if(!response.ok)throw Error(body.error||'Request failed'); return body; }
-async function command(data) { if(busy)return; busy=true; clearError(); try { const status=await post(data); renderStatus(status); location.hash='connections'; } catch(error){showError(error)} finally{busy=false} }
+async function command(data) { if(busy)return; busy=true; clearError(); try { const status=await post(data); renderStatus(status); } catch(error){showError(error)} finally{busy=false} }
 function renderStatus(status) {
   $('state').textContent=status.running?'Script running':status.exit_code===null?'Idle':status.exit_code===0?'Completed':'Stopped with error';
   $('run-detail').textContent=status.running?`${status.kind} workflow started ${new Date(status.started).toLocaleString()}`:status.exit_code===null?'No workflow is running.':`Last ${status.kind} workflow exited with code ${status.exit_code}.`;
@@ -48,9 +49,11 @@ function plot(canvas, rows, headers, keys, scales, labels) {
   canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);
   const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);ctx.fillStyle='#fff';ctx.fillRect(0,0,width,height);
   const indexes=keys.map(k=>headers.indexOf(k)), time=headers.indexOf('time_s');
+  const colors=['#285a70','#c27831','#2e746c'];
+  labels.forEach((label,k)=>{if(indexes[k]<0)return;const legend=document.createElement('span');legend.textContent='● '+label+'  ';legend.style.color=colors[k];canvas.before(legend)});
   if(time<0||indexes.every(i=>i<0)){ctx.fillStyle='#526973';ctx.fillText('These channels are not in the CSV.',18,45);return}
   const values=[];for(const row of rows){const t=Number(row[time]);if(!Number.isFinite(t))continue;for(let k=0;k<indexes.length;k++){const i=indexes[k];if(i<0)continue;const y=Number(row[i])*scales[k];if(Number.isFinite(y))values.push({t,y,k})}}
-  if(!values.length)return;
+  if(!values.length){ctx.fillStyle='#526973';ctx.font='13px Segoe UI';ctx.fillText('Waiting for live readings',18,45);return}
   const minT=Math.min(...values.map(p=>p.t)),maxT=Math.max(...values.map(p=>p.t));
   let minY=Math.min(...values.map(p=>p.y)),maxY=Math.max(...values.map(p=>p.y)); if(maxY===minY){minY-=1;maxY+=1}
   const left=55,right=width-12,top=20,bottom=height-32;
@@ -58,9 +61,7 @@ function plot(canvas, rows, headers, keys, scales, labels) {
   ctx.strokeStyle='#e4eceb';ctx.fillStyle='#576f76';ctx.font='11px Segoe UI';
   for(let i=0;i<4;i++){const val=minY+(maxY-minY)*i/3;ctx.beginPath();ctx.moveTo(left,y(val));ctx.lineTo(right,y(val));ctx.stroke();ctx.fillText(val.toFixed(2),4,y(val)+4)}
   ctx.fillText(minT.toFixed(3)+' s',left,bottom+19);ctx.fillText(maxT.toFixed(3)+' s',right-48,bottom+19);
-  const colors=['#285a70','#c27831','#2e746c'];
   for(let k=0;k<keys.length;k++){if(indexes[k]<0)continue;ctx.strokeStyle=colors[k];ctx.lineWidth=1.4;ctx.beginPath();let began=false;for(const p of values){if(p.k!==k)continue;if(!began){ctx.moveTo(x(p.t),y(p.y));began=true}else ctx.lineTo(x(p.t),y(p.y))}ctx.stroke()}
-  labels.forEach((label,k)=>{if(indexes[k]<0)return;const legend=document.createElement('span');legend.textContent='● '+label+'  ';legend.style.color=colors[k];canvas.before(legend)});
 }
 async function preview(file) {
   clearError(); const title=file.path.split('/').pop(); $('preview-title').textContent=title;
@@ -78,25 +79,28 @@ async function refreshResults() {
 $('refresh-results').onclick=()=>refreshResults().catch(showError);
 
 async function refreshLive() {
-  if($('connections').hidden)return;
-  const data=await get('/api/live'), container=$('live-charts');
-  $('live-source').textContent=data.source?`Host monitor: ${data.source}. These readings are sequential USB polls, not synchronized high-rate captures.`:'Live host-monitor data appears here during a script run.';
-  if(!data.rows.length){container.replaceChildren();return}
-  container.replaceChildren();
-  const start=Number(data.rows[0].host_monotonic_s);
-  for(const role of ['test','load']){
-    const card=document.createElement('div');card.className='live-board';
-    const heading=document.createElement('h3');heading.textContent=role==='test'?'Test motor · opposing torque':'Load motor · velocity control';card.append(heading);
-    container.append(card);
-    const headers=['time_s','position','rpm','phase_a','phase_b','phase_c'];
-    const rows=data.rows.map(row=>{const sample=row.boards?.[role]||{};return [Number(row.host_monotonic_s)-start,...headers.slice(1).map(key=>sample[key])]});
-    for(const [title,keys,spanLabels] of [
-      ['Position · turns',['position'],['Position']],
-      ['Speed · rpm',['rpm'],['Speed']],
-      ['Three-phase currents · A',['phase_a','phase_b','phase_c'],['Phase A','Phase B','Phase C']]]){
-      const label=document.createElement('h4');label.textContent=title;card.append(label);
-      const canvas=document.createElement('canvas');card.append(canvas);
-      plot(canvas,rows,headers,keys,keys.map(()=>1),spanLabels);
+  const visible=['connections','manual','matrix'].filter(id=>!$(id).hidden);
+  if(!visible.length)return;
+  const data=await get('/api/live');
+  const start=data.rows.length?Number(data.rows[0].host_monotonic_s):0;
+  for(const id of visible){
+    const section=$(id),container=section.querySelector('.live-charts');
+    section.querySelector('.live-source').textContent=data.source?`Host monitor: ${data.source}. These readings are sequential USB polls, not synchronized high-rate captures.`:'Waiting for live readings from the script.';
+    container.replaceChildren();
+    for(const role of ['test','load']){
+      const card=document.createElement('div');card.className='live-board';
+      const heading=document.createElement('h3');heading.textContent=role==='test'?'Test motor · opposing torque':'Load motor · velocity control';card.append(heading);
+      container.append(card);
+      const headers=['time_s','position','rpm','phase_a','phase_b','phase_c'];
+      const rows=data.rows.map(row=>{const sample=row.boards?.[role]||{};return [Number(row.host_monotonic_s)-start,...headers.slice(1).map(key=>sample[key])]});
+      for(const [title,keys,spanLabels] of [
+        ['Position · turns',['position'],['Position']],
+        ['Speed · rpm',['rpm'],['Speed']],
+        ['Three-phase currents · A',['phase_a','phase_b','phase_c'],['Phase A','Phase B','Phase C']]]){
+        const label=document.createElement('h4');label.textContent=title;card.append(label);
+        const canvas=document.createElement('canvas');card.append(canvas);
+        plot(canvas,rows,headers,keys,keys.map(()=>1),spanLabels);
+      }
     }
   }
 }
