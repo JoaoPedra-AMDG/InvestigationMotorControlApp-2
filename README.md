@@ -8,8 +8,10 @@ The GitHub repository is the download link, not the running site. Open the style
 
 1. Download or clone this repository to a local drive. Install 64-bit Python 3.10 or newer. Close the ODrive GUI and other programs using the boards.
 2. Check the two serial numbers and rig settings near the top of `AllTests.py`. The site displays the serials from that file. Its other settings can also be edited in the script, just as in the standalone workflow.
-3. Open PowerShell in this folder and run `./start.ps1`. The launcher creates `.venv`, installs `numpy` and the pinned ODrive package, and starts the local server.
-4. Open `http://127.0.0.1:8765`. Starting the server does not connect or start either motor. Choose a point or matrix to start the script. Read the script's output and answer its prompts in **Connect and status**.
+3. Double-click `Launch Motor Workbench.cmd`. Keep its window open while using the site. The first launch creates `.venv` and installs `numpy` and the pinned ODrive package; this needs an internet connection and may take a few minutes.
+4. The workbench opens in your default browser at `http://127.0.0.1:8765`. If the browser does not open, enter that address yourself. Starting the server does not connect or start either motor. Choose a point or matrix to start the script. Read the script's output and answer its prompts in **Connect and status**.
+
+If double-clicking the launcher fails, open PowerShell in this folder and run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start.ps1`.
 
 Manual setup, if needed:
 

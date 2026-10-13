@@ -37,5 +37,5 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "Open http://127.0.0.1:$Port . Starting the server does not connect or start either drive."
-& $venvPython (Join-Path $projectDirectory 'script_site.py') --port $Port --rate $Rate
+& $venvPython (Join-Path $projectDirectory 'script_site.py') --port $Port --rate $Rate --open-browser
 if ($LASTEXITCODE -ne 0) { throw "The dashboard stopped with exit code $LASTEXITCODE." }

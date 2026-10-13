@@ -312,11 +312,21 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=8765)
     parser.add_argument('--rate', type=int, default=20)  # kept for existing start.ps1 calls
+    parser.add_argument('--open-browser', action='store_true', help='Open the local site in the default browser.')
     args = parser.parse_args()
     session = ScriptSession()
     server = ThreadingHTTPServer(('127.0.0.1', args.port), make_handler(session))
-    print(f'ODrive script workbench: http://127.0.0.1:{args.port}', flush=True)
+    address = f'http://127.0.0.1:{args.port}'
+    print(f'ODrive script workbench: {address}', flush=True)
     try:
+        if args.open_browser:
+            import webbrowser
+            try:
+                opened = webbrowser.open(address)
+            except OSError:
+                opened = False
+            if not opened:
+                print(f'Could not open the browser automatically. Visit {address}', flush=True)
         server.serve_forever()
     except KeyboardInterrupt:
         pass
