@@ -2,6 +2,8 @@
 
 This local site runs the bundled `AllTests.py` workflow. **The load motor controls velocity and the test motor applies opposing torque**, matching the working script. The script owns USB connection, board configuration, monitoring, captures and stopping. The browser collects test choices, shows script output and operator prompts, and opens the saved results.
 
+The GitHub repository is the download link, not the running site. Open the styled workbench through the local address below after starting `start.ps1`. Opening `script_site.html` directly cannot connect to the motor controller.
+
 ## Run on the computer connected to the ODrives
 
 1. Download or clone this repository to a local drive. Install 64-bit Python 3.10 or newer. Close the ODrive GUI and other programs using the boards.

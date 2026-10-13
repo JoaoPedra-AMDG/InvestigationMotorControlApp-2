@@ -10,8 +10,8 @@ function showTab() {
   if(['connections','manual','matrix'].includes(tab)) refreshLive().catch(showError);
 }
 addEventListener('hashchange',showTab); showTab();
-async function get(url) { const response=await fetch(url,{cache:'no-store'}); if(!response.ok)throw Error((await response.json()).error||'Request failed'); return response.json(); }
-async function post(data) { const response=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}); const body=await response.json(); if(!response.ok)throw Error(body.error||'Request failed'); return body; }
+async function get(url) { if(location.protocol==='file:')throw Error('Open this site through the local server. Run start.ps1, then visit http://127.0.0.1:8765.'); const response=await fetch(url,{cache:'no-store'}); if(!response.ok)throw Error((await response.json()).error||'Request failed'); return response.json(); }
+async function post(data) { if(location.protocol==='file:')throw Error('Open this site through the local server. Run start.ps1, then visit http://127.0.0.1:8765.'); const response=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}); const body=await response.json(); if(!response.ok)throw Error(body.error||'Request failed'); return body; }
 async function command(data) { if(busy)return; busy=true; clearError(); try { const status=await post(data); renderStatus(status); } catch(error){showError(error)} finally{busy=false} }
 function renderStatus(status) {
   $('state').textContent=status.running?'Script running':status.exit_code===null?'Idle':status.exit_code===0?'Completed':'Stopped with error';
