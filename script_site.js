@@ -14,7 +14,7 @@ async function get(url) { if(location.protocol==='file:')throw Error('Open this 
 async function post(data) { if(location.protocol==='file:')throw Error('Open this site through the local server. Run start.ps1, then visit http://127.0.0.1:8765.'); const response=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}); const body=await response.json(); if(!response.ok)throw Error(body.error||'Request failed'); return body; }
 async function command(data) { if(busy)return; busy=true; clearError(); try { const status=await post(data); renderStatus(status); } catch(error){showError(error)} finally{busy=false} }
 function renderStatus(status) {
-  $('state').textContent=status.running?'Script running':status.exit_code===null?'Idle':status.exit_code===0?'Completed':'Stopped with error';
+  $('state').textContent=status.prompt?'Action needed':status.running?'Script running':status.exit_code===null?'Idle':status.exit_code===0?'Completed':'Stopped with error';
   const connections=status.connections||{};
   for(const role of ['test','load']){
     const connection=connections[role]||{state:'disconnected',detail:''};
@@ -37,7 +37,7 @@ function renderStatus(status) {
   $('answer-ready').hidden=!prompt.includes('type ready');
   $('answer-yes').hidden=prompt.includes('type ready');
   $('answer-no').hidden=prompt.includes('type ready');
-  if(prompt && prompt!==previousPrompt){ $('prompt-card').scrollIntoView({block:'nearest'}); previousPrompt=prompt; }
+  if(prompt && prompt!==previousPrompt)previousPrompt=prompt;
   if(!prompt)previousPrompt='';
   for(const id of ['run-point','run-matrix','run-sequence'])$(id).disabled=status.running;
   $('stop').disabled=!status.running&&!anyConnected;
@@ -68,7 +68,7 @@ function plot(canvas, rows, headers, keys, scales, labels) {
   const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);ctx.fillStyle='#fff';ctx.fillRect(0,0,width,height);
   const indexes=keys.map(k=>headers.indexOf(k)), time=headers.indexOf('time_s');
   const colors=['#285a70','#c27831','#2e746c'];
-  labels.forEach((label,k)=>{if(indexes[k]<0)return;const legend=document.createElement('span');legend.textContent='● '+label+'  ';legend.style.color=colors[k];canvas.before(legend)});
+  if(!canvas.dataset.legendReady){labels.forEach((label,k)=>{if(indexes[k]<0)return;const legend=document.createElement('span');legend.textContent='● '+label+'  ';legend.style.color=colors[k];canvas.before(legend)});canvas.dataset.legendReady='true'}
   if(time<0||indexes.every(i=>i<0)){ctx.fillStyle='#526973';ctx.fillText('These channels are not in the CSV.',18,45);return}
   const values=[];for(const row of rows){const t=Number(row[time]);if(!Number.isFinite(t))continue;for(let k=0;k<indexes.length;k++){const i=indexes[k];if(i<0||row[i]==null||row[i]==='')continue;const y=Number(row[i])*scales[k];if(Number.isFinite(y))values.push({t,y,k})}}
   if(!values.length){ctx.fillStyle='#526973';ctx.font='13px Segoe UI';ctx.fillText('Waiting for live readings',18,45);return}
@@ -160,21 +160,32 @@ async function refreshLive() {
     $('monitor-source').textContent=data.source?`${data.source}${age!==null?` · last reading ${Math.max(0,age).toFixed(1)} s ago`:''}${age!==null&&age>4?' · readings may be stale':''}`:'Connect both motors to see live readings.';
     for(const role of ['test','load']){
       const sample=data.connections&&data.connections[role]?.state!=='connected'?undefined:[...data.rows].reverse().find(row=>row.boards?.[role])?.boards[role];
-      const target=$(role+'-monitor-metrics');target.replaceChildren();
+      const target=$(role+'-monitor-metrics');
       const axisState=sample?.state==null?'—':sample.state===1?'IDLE (1)':sample.state===8?'Closed loop (8)':String(sample.state);
       const errorText=value=>value==null?'—':Number(value)===0?'None (0x0)':'0x'+Number(value).toString(16);
       const metrics=[['Axis state',axisState],['Armed',sample?.armed==null?'—':sample.armed?'Yes':'No'],['Position · turns',sample?.position],['Speed · rpm',sample?.rpm],['Iq · A',sample?.iq],['Id · A',sample?.id],['Phase A · A',sample?.phase_a],['Phase B · A',sample?.phase_b],['Phase C · A',sample?.phase_c],['Bus voltage · V',sample?.vbus],['Bus current · A',sample?.ibus],['FET temperature · °C',sample?.fet_C],['Active errors',errorText(sample?.errors)],['Last disarm',errorText(sample?.disarm)]];
-      for(const [label,value] of metrics){const item=document.createElement('div');item.className='metric';const name=document.createElement('span');name.textContent=label;const val=document.createElement('strong');val.textContent=typeof value==='number'?(Number.isFinite(value)?value.toFixed(label==='Axis state'?0:2):'—'):(value??'—');item.append(name,val);target.append(item)}
+      if(target.children.length!==metrics.length){
+        target.replaceChildren();
+        for(const [label] of metrics){const item=document.createElement('div');item.className='metric';const name=document.createElement('span');name.textContent=label;item.append(name,document.createElement('strong'));target.append(item)}
+      }
+      metrics.forEach(([label,value],index)=>{target.children[index].querySelector('strong').textContent=typeof value==='number'?(Number.isFinite(value)?value.toFixed(label==='Axis state'?0:2):'—'):(value??'—')});
     }
   }
   for(const id of visible){
     const section=$(id),container=section.querySelector('.live-charts');
     section.querySelector('.live-source').textContent=data.source?`${data.source}. These readings are sequential USB polls, not synchronized high-rate captures.`:'Connect both motors or start a test to see live readings.';
-    container.replaceChildren();
+    if(!container.children.length){
+      for(const role of ['test','load']){
+        const card=document.createElement('div');card.className='live-board';card.dataset.role=role;
+        const heading=document.createElement('h3');heading.textContent=role==='test'?'Test motor · opposing torque':'Load motor · velocity control';card.append(heading);
+        for(const title of ['Position · turns','Speed · rpm','Three-phase voltage · V (commanded, phase to neutral)','Three-phase currents · A']){
+          const label=document.createElement('h4');label.textContent=title;card.append(label,document.createElement('canvas'));
+        }
+        container.append(card);
+      }
+    }
     for(const role of ['test','load']){
-      const card=document.createElement('div');card.className='live-board';
-      const heading=document.createElement('h3');heading.textContent=role==='test'?'Test motor · opposing torque':'Load motor · velocity control';card.append(heading);
-      container.append(card);
+      const card=container.querySelector(`[data-role="${role}"]`);
       const headers=['time_s','position','rpm','voltage_a','voltage_b','voltage_c','phase_a','phase_b','phase_c'];
       const rows=data.rows.map(row=>{
         const sample=row.boards?.[role]||{};
@@ -183,15 +194,13 @@ async function refreshLive() {
         const voltage=hasVoltage?[alpha,-alpha/2+Math.sqrt(3)*beta/2,-alpha/2-Math.sqrt(3)*beta/2]:[null,null,null];
         return [Number(row.host_monotonic_s)-start,sample.position,sample.rpm,...voltage,sample.phase_a,sample.phase_b,sample.phase_c];
       });
-      for(const [title,keys,spanLabels] of [
+      const charts=[
         ['Position · turns',['position'],['Position']],
         ['Speed · rpm',['rpm'],['Speed']],
         ['Three-phase voltage · V (commanded, phase to neutral)',['voltage_a','voltage_b','voltage_c'],['Phase A','Phase B','Phase C']],
-        ['Three-phase currents · A',['phase_a','phase_b','phase_c'],['Phase A','Phase B','Phase C']]]){
-        const label=document.createElement('h4');label.textContent=title;card.append(label);
-        const canvas=document.createElement('canvas');card.append(canvas);
-        plot(canvas,rows,headers,keys,keys.map(()=>1),spanLabels);
-      }
+        ['Three-phase currents · A',['phase_a','phase_b','phase_c'],['Phase A','Phase B','Phase C']]];
+      const canvases=card.querySelectorAll('canvas');
+      charts.forEach(([,keys,spanLabels],index)=>plot(canvases[index],rows,headers,keys,keys.map(()=>1),spanLabels));
     }
   }
 }

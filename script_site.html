@@ -8,6 +8,7 @@
   <script src="script_site.js" defer></script>
 </head>
 <body>
+  <div class="site-chrome">
   <header class="topbar">
     <div><strong>Motor Test Workbench</strong><small>Powered by the working AllTests.py workflow</small></div>
     <div class="top-actions"><span id="test-connection" class="connection-chip">Test: disconnected</span><span id="load-connection" class="connection-chip">Load: disconnected</span><button id="connect" class="primary">Connect both motors</button><button id="disconnect" disabled>Disconnect</button><span id="state" class="badge">Idle</span><button id="stop" class="danger">Stop both motors</button></div>
@@ -19,6 +20,7 @@
     <a href="#matrix" data-tab="matrix">Test matrix</a>
     <a href="#results" data-tab="results">Results</a>
   </nav>
+  </div>
   <main>
     <p id="error" role="alert" hidden></p>
     <article id="prompt-card" class="card prompt" hidden><h2>Operator action required</h2><p id="prompt-text"></p><div class="row start"><button id="answer-yes" class="primary">Continue / yes</button><button id="answer-no">Cancel / no</button><button id="answer-ready" hidden>Ready after GUI handoff</button></div></article>
