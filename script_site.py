@@ -79,6 +79,7 @@ class ScriptSession:
         self.partial = ''
         self.prompt = ''
         self.reader = None
+        self.connection_notice = ''
 
     def status(self):
         with self.lock:
@@ -86,12 +87,14 @@ class ScriptSession:
             return dict(running=running, kind=self.kind, started=self.started,
                         exit_code=self.exit_code, lines=list(self.lines),
                         partial=self.partial, prompt=self.prompt,
-                        connections=self.connections.status())
+                        connections=self.connections.status(),
+                        connection_notice=self.connection_notice)
 
     def connect(self):
         with self.lock:
             if self.process is not None and self.process.poll() is None:
                 raise ValueError('Wait for the script workflow to finish before connecting from the site.')
+            self.connection_notice = ''
             self.connections.connect_both()
             return self.status()
 
@@ -100,6 +103,20 @@ class ScriptSession:
             if self.process is not None and self.process.poll() is None:
                 raise ValueError('The script owns USB during a workflow; use Stop both motors if needed.')
             self.connections.release_all()
+            self.connection_notice = 'Both USB connections released.'
+            return self.status()
+
+    def clear_errors(self):
+        with self.lock:
+            if self.process is not None and self.process.poll() is None:
+                raise ValueError('Wait for the script workflow to finish before clearing errors.')
+            self.connection_notice = ''
+            results = self.connections.clear_errors()
+            remaining = [f'{role}: active {values["active"]:#x}, last disarm {values["disarm"]:#x}'
+                         for role, values in results.items() if values['active'] or values['disarm']]
+            self.connection_notice = ('Clear errors sent to both boards. ' +
+                ('Remaining: ' + '; '.join(remaining) + '. Resolve active fault causes before testing.'
+                 if remaining else 'No active or recorded disarm errors remain.'))
             return self.status()
 
     def _read_output(self, process):
@@ -160,6 +177,7 @@ class ScriptSession:
             else:
                 raise ValueError('Unknown script workflow.')
             self.connections.release_all()
+            self.connection_notice = ''
             RESULTS.mkdir(exist_ok=True)
             self.lines.clear()
             self.partial = self.prompt = ''
@@ -281,8 +299,10 @@ def make_handler(session):
                     return self.send(200, listed_results())
                 if url.path == '/api/live':
                     state = session.status()
-                    since = datetime.fromisoformat(state['started']).timestamp() if state['running'] else None
-                    return self.send(200, live_samples(since))
+                    if state['running']:
+                        since = datetime.fromisoformat(state['started']).timestamp()
+                        return self.send(200, live_samples(since))
+                    return self.send(200, session.connections.live())
                 if url.path == '/api/info':
                     source = SCRIPT.read_text(encoding='utf-8')
                     serials = re.search(r"^SERIALS = \{'test': '([^']+)', 'load': '([^']+)'\}", source, re.M)
@@ -318,6 +338,8 @@ def make_handler(session):
                     result = session.connect()
                 elif action == 'disconnect':
                     result = session.disconnect()
+                elif action == 'clear_errors':
+                    result = session.clear_errors()
                 elif action == 'answer':
                     result = session.answer(data.get('value'))
                 elif action == 'stop':

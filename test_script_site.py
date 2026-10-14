@@ -21,10 +21,21 @@ class FakeConnectionDriver:
 
     async def connect(self, serial):
         self.events.append(('connect', serial))
-        return {'serial': serial}
+        return {'serial': serial, 'state': 1, 'armed': False, 'errors': 0, 'disarm': 0}
 
     async def read(self, board, path):
-        return 1 if path == 'axis0.current_state' else False
+        return {'axis0.current_state': board['state'], 'axis0.is_armed': board['armed'],
+                'axis0.active_errors': board['errors'], 'axis0.disarm_reason': board['disarm']}[path]
+
+    async def sample(self, board):
+        return {'state': board['state'], 'armed': board['armed'], 'errors': board['errors'],
+                'disarm': board['disarm'], 'position': 1.25, 'rpm': 600.0,
+                'iq': .5, 'id': 0.0, 'phase_a': .2, 'phase_b': -.1, 'phase_c': -.1,
+                'vbus': 24.0, 'ibus': .3, 'fet_C': 30.0}
+
+    async def call(self, board, path):
+        self.events.append(('call', board['serial'], path))
+        board['disarm'] = 0
 
     def release_connection(self, board):
         self.events.append(('release', board['serial']))
@@ -55,6 +66,9 @@ class ScriptSiteTests(unittest.TestCase):
             connections.operation.result(timeout=5)
             with urllib.request.urlopen(base + '/api/status', timeout=5) as response:
                 self.assertEqual(json.load(response)['connections']['load']['state'], 'connected')
+            with urllib.request.urlopen(base + '/api/live', timeout=5) as response:
+                self.assertEqual(json.load(response)['rows'][-1]['boards']['test']['rpm'], 600.0)
+            self.assertIn('No active or recorded disarm errors remain.', post('clear_errors')['connection_notice'])
             self.assertEqual(post('disconnect')['connections']['test']['state'], 'disconnected')
         finally:
             server.shutdown()
@@ -67,12 +81,33 @@ class ScriptSiteTests(unittest.TestCase):
         connections.operation.result(timeout=5)
         self.assertEqual(connections.status()['test']['state'], 'connected')
         self.assertEqual(connections.status()['load']['state'], 'connected')
+        self.assertEqual(connections.live()['rows'][-1]['boards']['test']['rpm'], 600.0)
         self.assertEqual(driver.events[:2], [('connect', '01'), ('connect', '02')])
         connections.stop_connected()
         self.assertIn(('stop', ('test', 'load')), driver.events)
         connections.release_all()
         self.assertEqual(connections.status()['test']['state'], 'disconnected')
         self.assertEqual(driver.events[-2:], [('release', '01'), ('release', '02')])
+
+    def test_clear_errors_reports_active_faults_and_requires_idle(self):
+        driver = FakeConnectionDriver()
+        connections = MotorConnections(driver)
+        connections.connect_both()
+        connections.operation.result(timeout=5)
+        try:
+            connections.boards['test']['errors'] = 0x10
+            connections.boards['test']['disarm'] = 0x20
+            session = script_site.ScriptSession(connections)
+            result = session.clear_errors()
+            self.assertIn('active 0x10', result['connection_notice'])
+            self.assertEqual(connections.boards['test']['disarm'], 0)
+            connections.boards['load']['armed'] = True
+            calls_before = len([event for event in driver.events if event[0] == 'call'])
+            with self.assertRaisesRegex(ValueError, 'IDLE and disarmed'):
+                session.clear_errors()
+            self.assertEqual(len([event for event in driver.events if event[0] == 'call']), calls_before)
+        finally:
+            connections.release_all()
 
     def test_test_workflow_releases_idle_usb_connections(self):
         driver = FakeConnectionDriver()

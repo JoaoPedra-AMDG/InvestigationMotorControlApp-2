@@ -4,7 +4,11 @@ The experiment script owns its own connections while a workflow runs. This
 manager releases both idle connections before that subprocess starts.
 """
 import asyncio
+import math
 import threading
+import time
+from collections import deque
+from datetime import datetime, timezone
 
 
 class MotorConnections:
@@ -15,11 +19,21 @@ class MotorConnections:
         self.thread = None
         self.operation = None
         self.boards = {}
+        self.io_lock = asyncio.Lock()
+        self.monitor_task = None
+        self.rows = deque(maxlen=240)
+        self.sampled_at = None
         self.states = {role: {'state': 'disconnected', 'detail': '', 'open': False} for role in ('test', 'load')}
 
     def status(self):
         with self.lock:
             return {role: dict(value) for role, value in self.states.items()}
+
+    def live(self):
+        with self.lock:
+            return {'source': 'Connected USB monitoring' if self.boards else None,
+                    'rows': list(self.rows), 'sampled_at': self.sampled_at,
+                    'connections': self.status()}
 
     def _set(self, role, state, detail='', open=False):
         with self.lock:
@@ -78,6 +92,72 @@ class MotorConnections:
                 with self.lock:
                     still_open = role in self.boards
                 self._set(role, 'error', f'{serial or role}: {exc}', open=still_open)
+        with self.lock:
+            has_boards = bool(self.boards)
+        if has_boards and (self.monitor_task is None or self.monitor_task.done()):
+            try:
+                await self._sample_once()
+            except Exception as exc:
+                self._monitor_error(exc)
+            self.monitor_task = asyncio.create_task(self._monitor_loop())
+
+    async def _monitor_loop(self):
+        while True:
+            await asyncio.sleep(0.75)
+            try:
+                await self._sample_once()
+            except Exception as exc:
+                self._monitor_error(exc)
+
+    def _monitor_error(self, exc):
+        with self.lock:
+            roles = tuple(self.boards)
+        for role in roles:
+            self._set(role, 'error', f'Live USB monitoring failed: {exc}', open=True)
+
+    async def _sample_once(self):
+        with self.lock:
+            boards = dict(self.boards)
+        if not boards:
+            return
+        if self.driver is None:
+            import AllTests as driver
+        else:
+            driver = self.driver
+
+        async def one(role, board):
+            if self.driver is not None and hasattr(driver, 'sample'):
+                sample = await driver.sample(board)
+            else:
+                signals = driver.SIGNALS
+                values = await asyncio.wait_for(board.read_multiple(list(signals.values()), transient=True), 2)
+                sample = dict(zip(signals, values))
+                sample['rpm'] *= 60
+            cleaned = {}
+            for key, value in sample.items():
+                if hasattr(value, 'item'):
+                    value = value.item()
+                cleaned[key] = None if isinstance(value, float) and not math.isfinite(value) else value
+            return role, cleaned
+
+        async with self.io_lock:
+            outcomes = await asyncio.gather(*(one(role, board) for role, board in boards.items()),
+                                            return_exceptions=True)
+        samples = {}
+        for (role, _), outcome in zip(boards.items(), outcomes):
+            if isinstance(outcome, BaseException):
+                self._set(role, 'error', f'Live USB read failed: {outcome}', open=True)
+                continue
+            _, sample = outcome
+            samples[role] = sample
+            self._set(role, 'connected',
+                      f'USB connected · state {sample.get("state")} · armed {bool(sample.get("armed"))} · '
+                      f'active errors {int(sample.get("errors") or 0):#x} · '
+                      f'last disarm {int(sample.get("disarm") or 0):#x}', open=True)
+        if samples:
+            with self.lock:
+                self.rows.append({'host_monotonic_s': time.monotonic(), 'boards': samples})
+                self.sampled_at = datetime.now(timezone.utc).isoformat()
 
     async def _connect_driver(self, driver, serial, role):
         if self.driver is not None:
@@ -113,8 +193,19 @@ class MotorConnections:
             self.driver.release_connection(board)
 
     async def _release_all(self):
+        if self.monitor_task is not None:
+            self.monitor_task.cancel()
+            try:
+                await self.monitor_task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                pass  # A failed read must not prevent USB handoff.
+            self.monitor_task = None
         with self.lock:
             boards = list(self.boards.items())
+            self.rows.clear()
+            self.sampled_at = None
         if not boards:
             for role in self.states:
                 self._set(role, 'disconnected')
@@ -158,10 +249,47 @@ class MotorConnections:
         else:
             driver = self.driver
         try:
-            future = self._submit(driver.emergency_idle(boards))
+            async def stop():
+                async with self.io_lock:
+                    return await driver.emergency_idle(boards)
+            future = self._submit(stop())
             errors = future.result(timeout=15)
         except Exception as exc:
             raise ValueError(f'Could not stop connected motors: {exc}') from exc
         if errors:
             raise ValueError('Could not verify both motors stopped: ' + '; '.join(errors))
         return self.status()
+
+    def clear_errors(self):
+        with self.lock:
+            if set(self.boards) != {'test', 'load'}:
+                raise ValueError('Connect both motors before clearing errors.')
+            current = self.operation
+        if current is not None and not current.done():
+            raise ValueError('Wait for both motor connections to finish.')
+        try:
+            return self._submit(self._clear_errors()).result(timeout=15)
+        except Exception as exc:
+            raise ValueError(f'Could not clear errors on both motors: {exc}') from exc
+
+    async def _clear_errors(self):
+        if self.driver is None:
+            import AllTests as driver
+        else:
+            driver = self.driver
+        with self.lock:
+            boards = dict(self.boards)
+        async with self.io_lock:
+            for role, board in boards.items():
+                state = await driver.read(board, 'axis0.current_state')
+                armed = await driver.read(board, 'axis0.is_armed')
+                if state != 1 or armed:
+                    raise ValueError(f'{role} must be IDLE and disarmed before clearing errors.')
+            results = {}
+            for role, board in boards.items():
+                await driver.call(board, 'clear_errors')
+                results[role] = {
+                    'active': int(await driver.read(board, 'axis0.active_errors')),
+                    'disarm': int(await driver.read(board, 'axis0.disarm_reason')),
+                }
+            return results

@@ -27,6 +27,9 @@ function renderStatus(status) {
   const allConnected=['test','load'].every(role=>connections[role]?.state==='connected');
   $('connect').disabled=status.running||connectionBusy||allConnected;
   $('disconnect').disabled=status.running||connectionBusy||!anyConnected;
+  $('clear-errors').disabled=status.running||connectionBusy||!allConnected;
+  $('connection-notice').textContent=status.connection_notice||'';
+  $('connection-notice').hidden=!status.connection_notice;
   $('run-detail').textContent=status.running?`${status.kind} workflow started ${new Date(status.started).toLocaleString()}`:status.exit_code===null?'No workflow is running.':`Last ${status.kind} workflow exited with code ${status.exit_code}.`;
   const value=[...status.lines,status.partial].filter(Boolean).join('\n');
   if(value!==previousLog){ const log=$('log'); const nearBottom=log.scrollTop+log.clientHeight>=log.scrollHeight-80; log.textContent=value||'No script output yet.'; if(nearBottom)log.scrollTop=log.scrollHeight; previousLog=value; }
@@ -43,6 +46,7 @@ async function refreshStatus() { try{renderStatus(await get('/api/status'))}catc
 $('refresh-status').onclick=refreshStatus;
 $('connect').onclick=()=>command({action:'connect'});
 $('disconnect').onclick=()=>command({action:'disconnect'});
+$('clear-errors').onclick=()=>command({action:'clear_errors'});
 $('stop').onclick=()=>command({action:'stop'});
 $('answer-yes').onclick=()=>command({action:'answer',value:'yes'});
 $('answer-no').onclick=()=>command({action:'answer',value:'no'});
@@ -97,9 +101,21 @@ async function refreshLive() {
   if(!visible.length)return;
   const data=await get('/api/live');
   const start=data.rows.length?Number(data.rows[0].host_monotonic_s):0;
+  if(!$('connections').hidden){
+    const age=data.sampled_at?(Date.now()-Date.parse(data.sampled_at))/1000:null;
+    $('monitor-source').textContent=data.source?`${data.source}${age!==null?` · last reading ${Math.max(0,age).toFixed(1)} s ago`:''}${age!==null&&age>4?' · readings may be stale':''}`:'Connect both motors to see live readings.';
+    for(const role of ['test','load']){
+      const sample=data.connections&&data.connections[role]?.state!=='connected'?undefined:[...data.rows].reverse().find(row=>row.boards?.[role])?.boards[role];
+      const target=$(role+'-monitor-metrics');target.replaceChildren();
+      const axisState=sample?.state==null?'—':sample.state===1?'IDLE (1)':sample.state===8?'Closed loop (8)':String(sample.state);
+      const errorText=value=>value==null?'—':Number(value)===0?'None (0x0)':'0x'+Number(value).toString(16);
+      const metrics=[['Axis state',axisState],['Armed',sample?.armed==null?'—':sample.armed?'Yes':'No'],['Position · turns',sample?.position],['Speed · rpm',sample?.rpm],['Iq · A',sample?.iq],['Id · A',sample?.id],['Phase A · A',sample?.phase_a],['Phase B · A',sample?.phase_b],['Phase C · A',sample?.phase_c],['Bus voltage · V',sample?.vbus],['Bus current · A',sample?.ibus],['FET temperature · °C',sample?.fet_C],['Active errors',errorText(sample?.errors)],['Last disarm',errorText(sample?.disarm)]];
+      for(const [label,value] of metrics){const item=document.createElement('div');item.className='metric';const name=document.createElement('span');name.textContent=label;const val=document.createElement('strong');val.textContent=typeof value==='number'?(Number.isFinite(value)?value.toFixed(label==='Axis state'?0:2):'—'):(value??'—');item.append(name,val);target.append(item)}
+    }
+  }
   for(const id of visible){
     const section=$(id),container=section.querySelector('.live-charts');
-    section.querySelector('.live-source').textContent=data.source?`Host monitor: ${data.source}. These readings are sequential USB polls, not synchronized high-rate captures.`:'Waiting for live readings from the script.';
+    section.querySelector('.live-source').textContent=data.source?`${data.source}. These readings are sequential USB polls, not synchronized high-rate captures.`:'Connect both motors or start a test to see live readings.';
     container.replaceChildren();
     for(const role of ['test','load']){
       const card=document.createElement('div');card.className='live-board';

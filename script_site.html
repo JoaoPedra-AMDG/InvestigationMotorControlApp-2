@@ -29,8 +29,9 @@
         <article class="card"><span class="eyebrow">TEST MOTOR</span><h2 id="test-serial">—</h2><p>Opposing torque control</p><p id="test-connection-detail" class="connection-detail">USB disconnected.</p></article>
         <article class="card"><span class="eyebrow">LOAD MOTOR</span><h2 id="load-serial">—</h2><p>Velocity control</p><p id="load-connection-detail" class="connection-detail">USB disconnected.</p></article>
       </div>
+      <article class="card"><div class="row"><div><h2>Live monitoring</h2><p id="monitor-source">Connect both motors to see live readings.</p></div><button id="clear-errors" disabled>Clear all errors</button></div><p id="connection-notice" role="status" hidden></p><div class="grid two monitor-grid"><div><h3>Test motor</h3><div id="test-monitor-metrics" class="metric-grid"></div></div><div><h3>Load motor</h3><div id="load-monitor-metrics" class="metric-grid"></div></div></div><p class="muted">Active errors reflect current fault conditions. Clearing recorded errors does not remove an active fault cause.</p></article>
       <article class="card"><div class="row"><div><h2>Run state</h2><p id="run-detail">No workflow is running.</p></div><button id="refresh-status">Refresh</button></div><pre id="log" aria-live="polite"></pre></article>
-      <article class="card"><h2>Live trends</h2><p class="live-source">Waiting for live readings from the script.</p><div class="live-charts grid two"></div></article>
+      <article class="card"><h2>Live trends</h2><p class="live-source">Connect both motors or start a test to see live trends.</p><div class="live-charts grid two"></div></article>
     </section>
     <section id="manual" class="page" hidden>
       <h1>Manual control</h1>

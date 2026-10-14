@@ -23,7 +23,7 @@ py -3 -m venv .venv
 
 ## Sections
 
-- **Connect and status:** the top bar opens idle USB connections to both boards and shows each connection state. It releases them before a test so the script can reopen them. This connection step does not start motion. The page also shows board serials, script output, live run state, operator prompts, and side-by-side test/load position, speed and phase-current trends from the script's `monitor.jsonl`.
+- **Connect and status:** the top bar opens idle USB connections to both boards and shows each connection state. While connected, the page polls position, speed, three-phase currents, bus readings, temperature, axis state, and error registers and plots live trends. **Clear all errors** calls the ODrive firmware command on both idle, disarmed boards, then displays any active faults that remain. Starting a test releases the site's USB connections so the script can reopen them and publish its own monitor readings. Connecting does not start motion.
 - **Manual control:** one sensored or sensorless measured point using the script's speed ramp, current sign probe, capture and stop. This is a point workflow, rather than arbitrary direct setpoint control.
 - **Motor tuning:** explains the script-managed velocity gains, ramps, limits and per-point feedback bandwidth. Independent automated PID tuning is not part of the working script and is not exposed as an active control.
 - **Test matrix:** runs the script's matrix workflow or full six-stage sequence. An error stops the matrix, as in the script.
