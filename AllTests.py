@@ -475,6 +475,9 @@ SIGNALS = {
     'phase_a': 'axis0.motor.alpha_beta_controller.current_meas_phA',
     'phase_b': 'axis0.motor.alpha_beta_controller.current_meas_phB',
     'phase_c': 'axis0.motor.alpha_beta_controller.current_meas_phC',
+    # FOC output voltage vector for live commanded phase-voltage trends.
+    'v_alpha': 'axis0.motor.foc.final_v_alpha',
+    'v_beta': 'axis0.motor.foc.final_v_beta',
 }
 
 STANDSTILL_MEAN_RPM_MAX = 10.0
@@ -522,6 +525,8 @@ def inspect_sample(role, s, expected=None, sensorless_test=False,
     idle_disarmed = s['state'] == 1 and not s['armed']
     phases = ('phase_a', 'phase_b', 'phase_c')
     for key, value in s.items():
+        if key in ('v_alpha', 'v_beta'):
+            continue  # Plot telemetry, not a safety input; can be stale while disarmed.
         if key == 'rpm' and sensorless_test and estimated_speed_grace:
             continue  # The just-armed estimator may report a transient speed.
         if key in ('rpm', 'position') and role == 'test' and idle_disarmed:

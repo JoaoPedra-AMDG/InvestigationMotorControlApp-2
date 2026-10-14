@@ -70,7 +70,7 @@ function plot(canvas, rows, headers, keys, scales, labels) {
   const colors=['#285a70','#c27831','#2e746c'];
   labels.forEach((label,k)=>{if(indexes[k]<0)return;const legend=document.createElement('span');legend.textContent='● '+label+'  ';legend.style.color=colors[k];canvas.before(legend)});
   if(time<0||indexes.every(i=>i<0)){ctx.fillStyle='#526973';ctx.fillText('These channels are not in the CSV.',18,45);return}
-  const values=[];for(const row of rows){const t=Number(row[time]);if(!Number.isFinite(t))continue;for(let k=0;k<indexes.length;k++){const i=indexes[k];if(i<0)continue;const y=Number(row[i])*scales[k];if(Number.isFinite(y))values.push({t,y,k})}}
+  const values=[];for(const row of rows){const t=Number(row[time]);if(!Number.isFinite(t))continue;for(let k=0;k<indexes.length;k++){const i=indexes[k];if(i<0||row[i]==null||row[i]==='')continue;const y=Number(row[i])*scales[k];if(Number.isFinite(y))values.push({t,y,k})}}
   if(!values.length){ctx.fillStyle='#526973';ctx.font='13px Segoe UI';ctx.fillText('Waiting for live readings',18,45);return}
   const minT=Math.min(...values.map(p=>p.t)),maxT=Math.max(...values.map(p=>p.t));
   let minY=Math.min(...values.map(p=>p.y)),maxY=Math.max(...values.map(p=>p.y)); if(maxY===minY){minY-=1;maxY+=1}
@@ -121,11 +121,18 @@ async function refreshLive() {
       const card=document.createElement('div');card.className='live-board';
       const heading=document.createElement('h3');heading.textContent=role==='test'?'Test motor · opposing torque':'Load motor · velocity control';card.append(heading);
       container.append(card);
-      const headers=['time_s','position','rpm','phase_a','phase_b','phase_c'];
-      const rows=data.rows.map(row=>{const sample=row.boards?.[role]||{};return [Number(row.host_monotonic_s)-start,...headers.slice(1).map(key=>sample[key])]});
+      const headers=['time_s','position','rpm','voltage_a','voltage_b','voltage_c','phase_a','phase_b','phase_c'];
+      const rows=data.rows.map(row=>{
+        const sample=row.boards?.[role]||{};
+        const alpha=Number(sample.v_alpha),beta=Number(sample.v_beta);
+        const hasVoltage=sample.v_alpha!=null&&sample.v_beta!=null&&Number.isFinite(alpha)&&Number.isFinite(beta);
+        const voltage=hasVoltage?[alpha,-alpha/2+Math.sqrt(3)*beta/2,-alpha/2-Math.sqrt(3)*beta/2]:[null,null,null];
+        return [Number(row.host_monotonic_s)-start,sample.position,sample.rpm,...voltage,sample.phase_a,sample.phase_b,sample.phase_c];
+      });
       for(const [title,keys,spanLabels] of [
         ['Position · turns',['position'],['Position']],
         ['Speed · rpm',['rpm'],['Speed']],
+        ['Three-phase voltage · V (commanded, phase to neutral)',['voltage_a','voltage_b','voltage_c'],['Phase A','Phase B','Phase C']],
         ['Three-phase currents · A',['phase_a','phase_b','phase_c'],['Phase A','Phase B','Phase C']]]){
         const label=document.createElement('h4');label.textContent=title;card.append(label);
         const canvas=document.createElement('canvas');card.append(canvas);
