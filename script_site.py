@@ -24,7 +24,8 @@ RESULTS = ROOT / 'results'
 STOP_REQUEST = ROOT / 'site-estop.request'
 ASSETS = {'/': ('script_site.html', 'text/html; charset=utf-8'),
           '/script_site.js': ('script_site.js', 'text/javascript; charset=utf-8'),
-          '/script_site.css': ('script_site.css', 'text/css; charset=utf-8')}
+          '/script_site.css': ('script_site.css', 'text/css; charset=utf-8'),
+          '/demo_fifth_harmonic.svg': ('demo_fifth_harmonic.svg', 'image/svg+xml')}
 
 
 def point_args(data):
