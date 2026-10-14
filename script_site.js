@@ -28,6 +28,7 @@ function renderStatus(status) {
   $('connect').disabled=status.running||connectionBusy||allConnected;
   $('disconnect').disabled=status.running||connectionBusy||!anyConnected;
   $('clear-errors').disabled=status.running||connectionBusy||!allConnected;
+  $('recover-watchdogs').disabled=status.running||connectionBusy||!allConnected;
   $('connection-notice').textContent=status.connection_notice||'';
   $('connection-notice').hidden=!status.connection_notice;
   $('run-detail').textContent=status.running?`${status.kind} workflow started ${new Date(status.started).toLocaleString()}`:status.exit_code===null?'No workflow is running.':`Last ${status.kind} workflow exited with code ${status.exit_code}.`;
@@ -47,6 +48,7 @@ $('refresh-status').onclick=refreshStatus;
 $('connect').onclick=()=>command({action:'connect'});
 $('disconnect').onclick=()=>command({action:'disconnect'});
 $('clear-errors').onclick=()=>command({action:'clear_errors'});
+$('recover-watchdogs').onclick=()=>command({action:'recover_watchdogs'});
 $('stop').onclick=()=>command({action:'stop'});
 $('answer-yes').onclick=()=>command({action:'answer',value:'yes'});
 $('answer-no').onclick=()=>command({action:'answer',value:'no'});
@@ -162,7 +164,13 @@ async function refreshLive() {
       const sample=data.connections&&data.connections[role]?.state!=='connected'?undefined:[...data.rows].reverse().find(row=>row.boards?.[role])?.boards[role];
       const target=$(role+'-monitor-metrics');
       const axisState=sample?.state==null?'—':sample.state===1?'IDLE (1)':sample.state===8?'Closed loop (8)':String(sample.state);
-      const errorText=value=>value==null?'—':Number(value)===0?'None (0x0)':'0x'+Number(value).toString(16);
+      const errorText=value=>{
+        if(value==null)return '—';
+        const bits=Number(value);
+        if(bits===0)return 'None (0x0)';
+        const code='0x'+bits.toString(16);
+        return bits&0x1000000?`Watchdog timer expired (${code})`:code;
+      };
       const metrics=[['Axis state',axisState],['Armed',sample?.armed==null?'—':sample.armed?'Yes':'No'],['Position · turns',sample?.position],['Speed · rpm',sample?.rpm],['Iq · A',sample?.iq],['Id · A',sample?.id],['Phase A · A',sample?.phase_a],['Phase B · A',sample?.phase_b],['Phase C · A',sample?.phase_c],['Bus voltage · V',sample?.vbus],['Bus current · A',sample?.ibus],['FET temperature · °C',sample?.fet_C],['Active errors',errorText(sample?.errors)],['Last disarm',errorText(sample?.disarm)]];
       if(target.children.length!==metrics.length){
         target.replaceChildren();

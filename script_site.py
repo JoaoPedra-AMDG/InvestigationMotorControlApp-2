@@ -120,6 +120,20 @@ class ScriptSession:
                  if remaining else 'No active or recorded disarm errors remain.'))
             return self.status()
 
+    def recover_watchdogs(self):
+        with self.lock:
+            if self.process is not None and self.process.poll() is None:
+                raise ValueError('Wait for the script workflow to finish before recovering watchdogs.')
+            recovery = self.connections.recover_watchdogs()
+            remaining = [f'{role}: active {values["active"]:#x}, last disarm {values["disarm"]:#x}'
+                         for role, values in recovery['results'].items()
+                         if values['active'] or values['disarm']]
+            disabled = ', '.join(recovery['disabled']) or 'none (already disabled)'
+            self.connection_notice = (f'Idle watchdog disabled on: {disabled}. ' +
+                ('Remaining faults: ' + '; '.join(remaining) + '.' if remaining else
+                 'Both motors report no active or recorded disarm errors.'))
+            return self.status()
+
     def _read_output(self, process):
         # Read characters so prompts without a trailing newline appear in the browser.
         stream = io.TextIOWrapper(process.stdout, encoding='utf-8', errors='replace', newline='')
@@ -375,6 +389,8 @@ def make_handler(session):
                     result = session.disconnect()
                 elif action == 'clear_errors':
                     result = session.clear_errors()
+                elif action == 'recover_watchdogs':
+                    result = session.recover_watchdogs()
                 elif action == 'answer':
                     result = session.answer(data.get('value'))
                 elif action == 'stop':

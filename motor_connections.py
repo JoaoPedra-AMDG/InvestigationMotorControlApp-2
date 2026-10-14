@@ -81,17 +81,18 @@ class MotorConnections:
                     self.boards[role] = board
                 self._set(role, 'connected', f'USB connected · axis state {state} · armed {bool(armed)}', open=True)
             except Exception as exc:
+                reason = str(exc) or type(exc).__name__
                 if board is not None:
                     try:
                         self._release_board(board)
                     except Exception as release_exc:
                         with self.lock:
                             self.boards[role] = board
-                        self._set(role, 'error', f'{serial}: {exc}; USB release failed: {release_exc}', open=True)
+                        self._set(role, 'error', f'{serial}: {reason}; USB release failed: {release_exc}', open=True)
                         continue
                 with self.lock:
                     still_open = role in self.boards
-                self._set(role, 'error', f'{serial or role}: {exc}', open=still_open)
+                self._set(role, 'error', f'{serial or role}: {reason}', open=still_open)
         with self.lock:
             has_boards = bool(self.boards)
         if has_boards and (self.monitor_task is None or self.monitor_task.done()):
@@ -271,6 +272,54 @@ class MotorConnections:
             return self._submit(self._clear_errors()).result(timeout=15)
         except Exception as exc:
             raise ValueError(f'Could not clear errors on both motors: {exc}') from exc
+
+    def recover_watchdogs(self):
+        """Operator-requested recovery after a script exits with watchdogs enabled."""
+        with self.lock:
+            if set(self.boards) != {'test', 'load'}:
+                raise ValueError('Connect both motors before recovering watchdogs.')
+            current = self.operation
+        if current is not None and not current.done():
+            raise ValueError('Wait for both motor connections to finish.')
+        try:
+            return self._submit(self._recover_watchdogs()).result(timeout=15)
+        except Exception as exc:
+            raise ValueError(f'Could not recover watchdogs: {exc}') from exc
+
+    async def _recover_watchdogs(self):
+        if self.driver is None:
+            import AllTests as driver
+        else:
+            driver = self.driver
+        with self.lock:
+            boards = dict(self.boards)
+        async with self.io_lock:
+            readings = {}
+            for role, board in boards.items():
+                state = await driver.read(board, 'axis0.current_state')
+                armed = await driver.read(board, 'axis0.is_armed')
+                if state != 1 or armed:
+                    raise ValueError(f'{role} must be IDLE and disarmed before watchdog recovery.')
+                readings[role] = {
+                    'active': int(await driver.read(board, 'axis0.active_errors')),
+                    'enabled': bool(await driver.read(board, 'axis0.config.enable_watchdog')),
+                }
+            if not any(value['active'] & 0x1000000 for value in readings.values()):
+                raise ValueError('No watchdog timeout fault is active.')
+            restored = []
+            for role, board in boards.items():
+                if readings[role]['enabled']:
+                    await driver.checked_write(board, 'axis0.config.enable_watchdog', False)
+                    restored.append(role)
+                await driver.call(board, 'axis0.watchdog_feed')
+            results = {}
+            for role, board in boards.items():
+                await driver.call(board, 'clear_errors')
+                results[role] = {
+                    'active': int(await driver.read(board, 'axis0.active_errors')),
+                    'disarm': int(await driver.read(board, 'axis0.disarm_reason')),
+                }
+            return {'disabled': restored, 'results': results}
 
     async def _clear_errors(self):
         if self.driver is None:

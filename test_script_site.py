@@ -21,11 +21,18 @@ class FakeConnectionDriver:
 
     async def connect(self, serial):
         self.events.append(('connect', serial))
-        return {'serial': serial, 'state': 1, 'armed': False, 'errors': 0, 'disarm': 0}
+        return {'serial': serial, 'state': 1, 'armed': False, 'errors': 0, 'disarm': 0,
+                'watchdog_enabled': False}
 
     async def read(self, board, path):
         return {'axis0.current_state': board['state'], 'axis0.is_armed': board['armed'],
-                'axis0.active_errors': board['errors'], 'axis0.disarm_reason': board['disarm']}[path]
+                'axis0.active_errors': board['errors'], 'axis0.disarm_reason': board['disarm'],
+                'axis0.config.enable_watchdog': board['watchdog_enabled']}[path]
+
+    async def checked_write(self, board, path, value):
+        self.events.append(('write', board['serial'], path, value))
+        if path == 'axis0.config.enable_watchdog':
+            board['watchdog_enabled'] = value
 
     async def sample(self, board):
         return {'state': board['state'], 'armed': board['armed'], 'errors': board['errors'],
@@ -35,7 +42,10 @@ class FakeConnectionDriver:
 
     async def call(self, board, path):
         self.events.append(('call', board['serial'], path))
-        board['disarm'] = 0
+        if path == 'axis0.watchdog_feed' and not board['watchdog_enabled']:
+            board['errors'] &= ~0x1000000
+        if path == 'clear_errors':
+            board['disarm'] = 0
 
     def release_connection(self, board):
         self.events.append(('release', board['serial']))
@@ -106,6 +116,33 @@ class ScriptSiteTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'IDLE and disarmed'):
                 session.clear_errors()
             self.assertEqual(len([event for event in driver.events if event[0] == 'call']), calls_before)
+        finally:
+            connections.release_all()
+
+    def test_watchdog_recovery_requires_idle_and_clears_leftover_timeout(self):
+        driver = FakeConnectionDriver()
+        connections = MotorConnections(driver)
+        connections.connect_both()
+        connections.operation.result(timeout=5)
+        try:
+            test_board = connections.boards['test']
+            load_board = connections.boards['load']
+            for board in (test_board, load_board):
+                board['errors'] = 0x1000000
+                board['disarm'] = 0x1000000
+                board['watchdog_enabled'] = True
+            session = script_site.ScriptSession(connections)
+            load_board['armed'] = True
+            with self.assertRaisesRegex(ValueError, 'IDLE and disarmed'):
+                session.recover_watchdogs()
+            self.assertTrue(test_board['watchdog_enabled'])
+            load_board['armed'] = False
+            result = session.recover_watchdogs()
+            self.assertIn('Idle watchdog disabled on: test, load', result['connection_notice'])
+            self.assertIn('no active or recorded disarm errors', result['connection_notice'])
+            self.assertFalse(test_board['watchdog_enabled'])
+            self.assertFalse(load_board['watchdog_enabled'])
+            self.assertIn(('write', '01', 'axis0.config.enable_watchdog', False), driver.events)
         finally:
             connections.release_all()
 
