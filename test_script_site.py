@@ -179,6 +179,27 @@ class ScriptSiteTests(unittest.TestCase):
             self.assertEqual(result['source'], 'session_1/monitor.jsonl')
             self.assertEqual(result['rows'][0]['boards']['load']['rpm'], 601)
 
+    def test_recent_manual_spectra_excludes_matrix_and_incomplete_captures(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name, finished in [('point_manual_old', 10), ('point_manual_new', 30),
+                                   ('point_matrix', 40), ('point_incomplete', 50)]:
+                folder = root / name
+                folder.mkdir()
+                (folder / 'capture.json').write_text(json.dumps({
+                    'status': 'captured', 'point': {'mode': 'sensored', 'rpm': 600, 'amps': .5},
+                    'finished_unix_s': finished}), encoding='utf-8')
+                for artifact in ('analysis.json', 'motion.json', 'pair_psd_low_frequency.svg',
+                                 'pair_psd_full_range.svg'):
+                    if name != 'point_incomplete':
+                        (folder / artifact).write_text('{}', encoding='utf-8')
+            (root / 'matrix.json').write_text(json.dumps({'points': {
+                'matrix-point': {'folder': 'point_matrix', 'status': 'complete'}}}), encoding='utf-8')
+            with patch.object(script_site, 'RESULTS', root):
+                runs = script_site.recent_manual_spectra()
+            self.assertEqual([run['folder'] for run in runs], ['point_manual_new', 'point_manual_old'])
+            self.assertEqual(runs[0]['rpm'], 600)
+
 
 if __name__ == '__main__':
     unittest.main()

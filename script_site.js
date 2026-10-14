@@ -89,8 +89,62 @@ async function preview(file) {
   if(file.path.endsWith('.csv')){const text=await (await fetch(url)).text();const all=csvRows(text);const headers=all.shift()||[];const stride=Math.max(1,Math.ceil(all.length/2500)),rows=all.filter((_,i)=>i%stride===0);const summary=document.createElement('p');summary.textContent=`${all.length} original samples · showing every ${stride} sample(s)`;target.append(summary);for(const [name,keys,scales,labels] of [['Position',['position_turn','estimated_position_turn','measured_position_turn'],[1,1,1],['Position','Estimated','Measured']],['Speed',['velocity_turn_s'],[60],['Speed rpm']],['Three-phase currents',['phase_a_A','phase_b_A','phase_c_A'],[1,1,1],['Phase A','Phase B','Phase C']]]){const h=document.createElement('h3');h.textContent=name;target.append(h);const group=document.createElement('div');target.append(group);const canvas=document.createElement('canvas');group.append(canvas);plot(canvas,rows,headers,keys,scales,labels)}return}
   const text=await(await fetch(url)).text();const pre=document.createElement('pre');pre.textContent=text.slice(0,30000);target.append(pre);
 }
+let manualRuns=[],spectrumRange='low_frequency',spectrumRequest=0;
+function renderSpectrumImage() {
+  const run=manualRuns.find(item=>item.folder===$('manual-spectrum-run').value);
+  if(!run)return;
+  const url='/result?path='+encodeURIComponent(`${run.folder}/pair_psd_${spectrumRange}.svg`);
+  $('manual-spectrum-plot').src=url;
+  $('spectrum-open').href=url;
+  $('spectrum-low').setAttribute('aria-pressed',String(spectrumRange==='low_frequency'));
+  $('spectrum-full').setAttribute('aria-pressed',String(spectrumRange==='full_range'));
+}
+async function displayManualSpectrum() {
+  const run=manualRuns.find(item=>item.folder===$('manual-spectrum-run').value);
+  if(!run)return;
+  const request=++spectrumRequest;
+  const analysis=await get('/result?path='+encodeURIComponent(`${run.folder}/analysis.json`));
+  if(request!==spectrumRequest)return;
+  const tbody=$('spectrum-metrics').querySelector('tbody');tbody.replaceChildren();
+  const fmt=value=>Number.isFinite(Number(value))?Number(value).toExponential(3):'—';
+  const fundamentals=[];
+  let resolutionWarning=false;
+  for(const role of ['test','load']){
+    const phases=analysis.boards?.[role]?.phases||{};
+    const first=phases.a;
+    if(first)fundamentals.push(`${role} ${Number(first.expected_fundamental_Hz).toFixed(1)} Hz (band ${first.band_Hz.map(v=>Number(v).toFixed(1)).join('–')} Hz)`);
+    for(const phase of ['a','b','c']){
+      const metric=phases[phase];if(!metric)continue;
+      resolutionWarning ||= !metric.trustworthy_fundamental_comparison;
+      const tr=document.createElement('tr');
+      for(const value of [`${role} / ${phase.toUpperCase()}`,fmt(metric.in_band_variance_A2),fmt(metric.out_of_band_variance_A2),
+        metric.in_band_fraction==null?'—':(100*metric.in_band_fraction).toFixed(1)+'%',
+        metric.in_to_out_ratio_dB!=null&&Number.isFinite(Number(metric.in_to_out_ratio_dB))?Number(metric.in_to_out_ratio_dB).toFixed(1):'—']){
+        const td=document.createElement('td');td.textContent=value;tr.append(td);
+      }
+      tbody.append(tr);
+    }
+  }
+  $('spectrum-note').textContent=`Electrical fundamental: ${fundamentals.join('; ')}. The green band in each plot is compared with all other positive frequencies.${resolutionWarning?' Frequency resolution is insufficient for a reliable in/out comparison.':''}`;
+  $('manual-spectrum-empty').hidden=true;
+  $('manual-spectrum-content').hidden=false;
+  renderSpectrumImage();
+}
+async function refreshManualSpectra(runs) {
+  const select=$('manual-spectrum-run'),previous=select.value;
+  manualRuns=runs;select.replaceChildren();select.disabled=!runs.length;
+  if(!runs.length){const option=document.createElement('option');option.textContent='No completed manual captures yet';select.append(option);$('manual-spectrum-empty').hidden=false;$('manual-spectrum-content').hidden=true;return}
+  for(const run of runs){const option=document.createElement('option');option.value=run.folder;option.textContent=`${new Date(run.captured_at).toLocaleString()} · ${run.mode} · ${run.rpm} rpm · ${run.amps} A`;select.append(option)}
+  select.value=runs.some(run=>run.folder===previous)?previous:runs[0].folder;
+  await displayManualSpectrum();
+}
+$('manual-spectrum-run').onchange=()=>displayManualSpectrum().catch(showError);
+$('spectrum-low').onclick=()=>{spectrumRange='low_frequency';renderSpectrumImage()};
+$('spectrum-full').onclick=()=>{spectrumRange='full_range';renderSpectrumImage()};
 async function refreshResults() {
-  const files=await get('/api/results'),list=$('result-files');list.replaceChildren();
+  const [files,runs]=await Promise.all([get('/api/results'),get('/api/manual-spectra')]);
+  await refreshManualSpectra(runs);
+  const list=$('result-files');list.replaceChildren();
   if(!files.length){list.textContent='No result files yet.';return}
   let lastFolder='';for(const file of files){const folder=file.path.includes('/')?file.path.slice(0,file.path.lastIndexOf('/')):'results';if(folder!==lastFolder){const heading=document.createElement('div');heading.className='folder';heading.textContent=folder;list.append(heading);lastFolder=folder}const button=document.createElement('button');button.textContent=file.path.split('/').pop();button.title=file.path;button.onclick=()=>preview(file).catch(showError);list.append(button)}
 }

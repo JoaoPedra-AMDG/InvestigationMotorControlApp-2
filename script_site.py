@@ -232,6 +232,38 @@ def listed_results():
     return sorted(files, key=lambda item: item['modified'], reverse=True)[:500]
 
 
+def recent_manual_spectra(limit=10):
+    """Completed interactive points with the script's saved current PSD analysis."""
+    if not RESULTS.exists():
+        return []
+    matrix_folders = set()
+    journal = RESULTS / 'matrix.json'
+    if journal.is_file():
+        data = json.loads(journal.read_text(encoding='utf-8'))
+        matrix_folders = {Path(entry['folder']).name for entry in data.get('points', {}).values()
+                          if isinstance(entry, dict) and entry.get('folder')}
+    runs = []
+    for folder in RESULTS.glob('point_*'):
+        if not folder.is_dir() or folder.name in matrix_folders:
+            continue
+        required = ('capture.json', 'analysis.json', 'motion.json',
+                    'pair_psd_low_frequency.svg', 'pair_psd_full_range.svg')
+        if not all((folder / name).is_file() for name in required):
+            continue
+        try:
+            capture = json.loads((folder / 'capture.json').read_text(encoding='utf-8'))
+            if capture.get('status') != 'captured':
+                continue
+            point = capture['point']
+            runs.append({'folder': folder.relative_to(RESULTS).as_posix(),
+                         'mode': point['mode'], 'rpm': point['rpm'], 'amps': point['amps'],
+                         'captured_at': datetime.fromtimestamp(
+                             capture.get('finished_unix_s', folder.stat().st_mtime), timezone.utc).isoformat()})
+        except (ValueError, KeyError, TypeError, OverflowError, OSError):
+            continue
+    return sorted(runs, key=lambda run: run['captured_at'], reverse=True)[:limit]
+
+
 def live_samples(since=None):
     """Read the script's latest host-monitor tail for display only."""
     if not RESULTS.exists():
@@ -297,6 +329,8 @@ def make_handler(session):
                     return self.send(200, session.status())
                 if url.path == '/api/results':
                     return self.send(200, listed_results())
+                if url.path == '/api/manual-spectra':
+                    return self.send(200, recent_manual_spectra())
                 if url.path == '/api/live':
                     state = session.status()
                     if state['running']:
