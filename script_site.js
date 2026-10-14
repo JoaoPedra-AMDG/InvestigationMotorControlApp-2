@@ -15,6 +15,18 @@ async function post(data) { if(location.protocol==='file:')throw Error('Open thi
 async function command(data) { if(busy)return; busy=true; clearError(); try { const status=await post(data); renderStatus(status); } catch(error){showError(error)} finally{busy=false} }
 function renderStatus(status) {
   $('state').textContent=status.running?'Script running':status.exit_code===null?'Idle':status.exit_code===0?'Completed':'Stopped with error';
+  const connections=status.connections||{};
+  for(const role of ['test','load']){
+    const connection=connections[role]||{state:'disconnected',detail:''};
+    const label=connection.state==='connected'?'connected':connection.state==='connecting'?'connecting…':connection.state==='error'?'error':'disconnected';
+    const chip=$(role+'-connection'); chip.textContent=(role==='test'?'Test: ':'Load: ')+label; chip.dataset.state=connection.state;
+    $(role+'-connection-detail').textContent=connection.detail|| (status.running?'USB handed to the test script.':'USB disconnected.');
+  }
+  const connectionBusy=['test','load'].some(role=>connections[role]?.state==='connecting');
+  const anyConnected=['test','load'].some(role=>connections[role]?.open);
+  const allConnected=['test','load'].every(role=>connections[role]?.state==='connected');
+  $('connect').disabled=status.running||connectionBusy||allConnected;
+  $('disconnect').disabled=status.running||connectionBusy||!anyConnected;
   $('run-detail').textContent=status.running?`${status.kind} workflow started ${new Date(status.started).toLocaleString()}`:status.exit_code===null?'No workflow is running.':`Last ${status.kind} workflow exited with code ${status.exit_code}.`;
   const value=[...status.lines,status.partial].filter(Boolean).join('\n');
   if(value!==previousLog){ const log=$('log'); const nearBottom=log.scrollTop+log.clientHeight>=log.scrollHeight-80; log.textContent=value||'No script output yet.'; if(nearBottom)log.scrollTop=log.scrollHeight; previousLog=value; }
@@ -25,10 +37,12 @@ function renderStatus(status) {
   if(prompt && prompt!==previousPrompt){ $('prompt-card').scrollIntoView({block:'nearest'}); previousPrompt=prompt; }
   if(!prompt)previousPrompt='';
   for(const id of ['run-point','run-matrix','run-sequence'])$(id).disabled=status.running;
-  $('stop').disabled=!status.running;
+  $('stop').disabled=!status.running&&!anyConnected;
 }
 async function refreshStatus() { try{renderStatus(await get('/api/status'))}catch(error){showError(error)} }
 $('refresh-status').onclick=refreshStatus;
+$('connect').onclick=()=>command({action:'connect'});
+$('disconnect').onclick=()=>command({action:'disconnect'});
 $('stop').onclick=()=>command({action:'stop'});
 $('answer-yes').onclick=()=>command({action:'answer',value:'yes'});
 $('answer-no').onclick=()=>command({action:'answer',value:'no'});

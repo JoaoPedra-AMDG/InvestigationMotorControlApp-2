@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
+from motor_connections import MotorConnections
 
 ROOT = Path(__file__).resolve().parent
 SCRIPT = ROOT / 'AllTests.py'
@@ -67,8 +68,9 @@ def matrix_args(data):
 
 
 class ScriptSession:
-    def __init__(self):
+    def __init__(self, connections=None):
         self.lock = threading.RLock()
+        self.connections = connections or MotorConnections()
         self.process = None
         self.kind = None
         self.started = None
@@ -83,7 +85,22 @@ class ScriptSession:
             running = self.process is not None and self.process.poll() is None
             return dict(running=running, kind=self.kind, started=self.started,
                         exit_code=self.exit_code, lines=list(self.lines),
-                        partial=self.partial, prompt=self.prompt)
+                        partial=self.partial, prompt=self.prompt,
+                        connections=self.connections.status())
+
+    def connect(self):
+        with self.lock:
+            if self.process is not None and self.process.poll() is None:
+                raise ValueError('Wait for the script workflow to finish before connecting from the site.')
+            self.connections.connect_both()
+            return self.status()
+
+    def disconnect(self):
+        with self.lock:
+            if self.process is not None and self.process.poll() is None:
+                raise ValueError('The script owns USB during a workflow; use Stop both motors if needed.')
+            self.connections.release_all()
+            return self.status()
 
     def _read_output(self, process):
         # Read characters so prompts without a trailing newline appear in the browser.
@@ -142,6 +159,7 @@ class ScriptSession:
                 args = ['--run', '--no-show']
             else:
                 raise ValueError('Unknown script workflow.')
+            self.connections.release_all()
             RESULTS.mkdir(exist_ok=True)
             self.lines.clear()
             self.partial = self.prompt = ''
@@ -173,6 +191,7 @@ class ScriptSession:
     def stop(self):
         with self.lock:
             if not self.process or self.process.poll() is not None:
+                self.connections.stop_connected()
                 return self.status()
             STOP_REQUEST.write_text('operator stop requested\n', encoding='utf-8')
             if self.prompt:
@@ -295,6 +314,10 @@ def make_handler(session):
                 action = data.get('action')
                 if action == 'start':
                     result = session.start(data.get('kind'), data)
+                elif action == 'connect':
+                    result = session.connect()
+                elif action == 'disconnect':
+                    result = session.disconnect()
                 elif action == 'answer':
                     result = session.answer(data.get('value'))
                 elif action == 'stop':
@@ -337,7 +360,10 @@ def main():
                 session.process.wait(timeout=15)
             except subprocess.TimeoutExpired:
                 print('Script has not exited after Stop; use the physical stop and inspect both boards.', flush=True)
-        server.server_close()
+        try:
+            session.connections.release_all()
+        finally:
+            server.server_close()
 
 
 if __name__ == '__main__':

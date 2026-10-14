@@ -10,7 +10,7 @@
 <body>
   <header class="topbar">
     <div><strong>Motor Test Workbench</strong><small>Powered by the working AllTests.py workflow</small></div>
-    <div class="top-actions"><span id="state" class="badge">Idle</span><button id="stop" class="danger">Stop both motors</button></div>
+    <div class="top-actions"><span id="test-connection" class="connection-chip">Test: disconnected</span><span id="load-connection" class="connection-chip">Load: disconnected</span><button id="connect" class="primary">Connect both motors</button><button id="disconnect" disabled>Disconnect</button><span id="state" class="badge">Idle</span><button id="stop" class="danger">Stop both motors</button></div>
   </header>
   <nav class="tabs" aria-label="Sections">
     <a href="#connections" data-tab="connections">Connect and status</a>
@@ -24,10 +24,10 @@
     <article id="prompt-card" class="card prompt" hidden><h2>Operator action required</h2><p id="prompt-text"></p><div class="row start"><button id="answer-yes" class="primary">Continue / yes</button><button id="answer-no">Cancel / no</button><button id="answer-ready" hidden>Ready after GUI handoff</button></div></article>
     <section id="connections" class="page">
       <h1>Connect and status</h1>
-      <p>The script connects to both ODrives when a test starts, then releases USB when it finishes. Its board, fault, calibration and stop checks are shown in the run log.</p>
+      <p>Use Connect both motors to open USB connections and confirm each board's serial and firmware. This does not start either motor. When you start a test, the site releases these connections so AllTests.py can connect and run its normal workflow.</p>
       <div class="grid two">
-        <article class="card"><span class="eyebrow">TEST MOTOR</span><h2 id="test-serial">—</h2><p>Opposing torque control</p></article>
-        <article class="card"><span class="eyebrow">LOAD MOTOR</span><h2 id="load-serial">—</h2><p>Velocity control</p></article>
+        <article class="card"><span class="eyebrow">TEST MOTOR</span><h2 id="test-serial">—</h2><p>Opposing torque control</p><p id="test-connection-detail" class="connection-detail">USB disconnected.</p></article>
+        <article class="card"><span class="eyebrow">LOAD MOTOR</span><h2 id="load-serial">—</h2><p>Velocity control</p><p id="load-connection-detail" class="connection-detail">USB disconnected.</p></article>
       </div>
       <article class="card"><div class="row"><div><h2>Run state</h2><p id="run-detail">No workflow is running.</p></div><button id="refresh-status">Refresh</button></div><pre id="log" aria-live="polite"></pre></article>
       <article class="card"><h2>Live trends</h2><p class="live-source">Waiting for live readings from the script.</p><div class="live-charts grid two"></div></article>
